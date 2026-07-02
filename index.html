@@ -391,10 +391,18 @@ body {
   }
 
   function todayStr() {
-    const d = new Date();
-    return d.getFullYear() + "-" +
-      String(d.getMonth() + 1).padStart(2, "0") + "-" +
-      String(d.getDate()).padStart(2, "0");
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/New_York",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).formatToParts(new Date());
+
+    const y = parts.find(p => p.type === "year").value;
+    const m = parts.find(p => p.type === "month").value;
+    const d = parts.find(p => p.type === "day").value;
+
+    return y + "-" + m + "-" + d;
   }
 
   function prettyDate(iso) {
@@ -660,7 +668,7 @@ body {
         '<div class="gd-ticket-top"><span>Group Round</span><span>' + prettyDate(round.id) + '</span></div>' +
         '<p class="gd-drawn-for">Today&apos;s genre</p>' +
         '<div class="gd-genre-stamp">' + escapeHtml(round.genre) + '</div>' +
-        '<div class="gd-status-row"><span class="gd-dot gd-live"></span><span>' + submittedCount + ' / ' + NAMES.length + ' songs submitted</span></div>' +
+        '<div class="gd-status-row"><span class="gd-dot ' + (allSubmitted ? 'gd-done' : 'gd-live') + '"></span><span>' + submittedCount + ' / ' + NAMES.length + ' songs submitted' + (allSubmitted ? ' — submissions locked' : '') + '</span></div>' +
         '<div class="gd-perf"></div>' +
         '<div id="gd-form-zone"></div>' +
       '</div>' +
@@ -706,6 +714,29 @@ body {
 
     const player = savedPlayer;
     const existing = getSubmissionFor(player);
+    const allSubmitted = state.submissions.length === NAMES.length;
+
+    if (allSubmitted && existing) {
+      zone.innerHTML =
+        '<div class="gd-submitted">' +
+          '<div class="gd-status-row" style="margin-top:0;margin-bottom:14px;">' +
+            '<span>Playing as <b>' + escapeHtml(player) + '</b></span>' +
+            '<button class="gd-edit-link" id="gd-switch-player" style="margin-left:auto;">Switch player</button>' +
+          '</div>' +
+          '<p class="gd-song-title">' + escapeHtml(existing.song_title) + '</p>' +
+          '<p class="gd-song-artist">' + escapeHtml(existing.song_artist) + '</p>' +
+          spotifySmallHtml(existing) +
+          spotifyEmbedHtml(existing) +
+          '<p class="gd-spotify-note" style="margin-top:12px;">All 5 songs are in, so submissions are locked for today.</p>' +
+        '</div>';
+
+      document.getElementById("gd-switch-player").onclick = function() {
+        clearSavedPlayer();
+        render();
+      };
+
+      return;
+    }
 
     zone.innerHTML =
       '<div class="gd-form">' +
@@ -837,6 +868,12 @@ body {
       const existing = getVote(voter, sub.id);
       const current = existing ? existing.score : "";
 
+      const voteControl = existing
+        ? '<div class="gd-stub-genre">' + escapeHtml(String(current)) + '/10 locked</div>'
+        : '<select class="gd-score-select" data-submission-id="' + sub.id + '" style="background:var(--panel-2);border:1px solid rgba(242,236,216,0.14);border-radius:8px;padding:8px;color:var(--paper);font-family:JetBrains Mono,monospace;font-size:12px;">' +
+            scoreOptions(current) +
+          '</select>';
+
       return '<div class="gd-stub">' +
         '<div class="gd-stub-left">' +
           '<div class="gd-stub-date">' + escapeHtml(sub.player) + '</div>' +
@@ -844,9 +881,7 @@ body {
           spotifySmallHtml(sub) +
           spotifyEmbedHtml(sub) +
         '</div>' +
-        '<select class="gd-score-select" data-submission-id="' + sub.id + '" style="background:var(--panel-2);border:1px solid rgba(242,236,216,0.14);border-radius:8px;padding:8px;color:var(--paper);font-family:JetBrains Mono,monospace;font-size:12px;">' +
-          scoreOptions(current) +
-        '</select>' +
+        voteControl +
       '</div>';
     }).join("");
 

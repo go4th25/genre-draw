@@ -88,6 +88,8 @@ async function saveSong(roundId, player, song) {
       spotify_embed_url: song.spotifyEmbedUrl || null,
       spotify_image: song.spotifyImage || null,
       spotify_album: song.spotifyAlbum || null,
+      spotify_uri: song.spotifyUri || null,
+      spotify_preview_url: song.spotifyPreviewUrl || null,
       updated_at: new Date().toISOString()
     };
 
@@ -126,3 +128,13 @@ async function loadHistory(excludeKey) {
     if (error) throw error;
     return data || [];
   }
+
+
+async function saveRoundPlaylist(roundId, playlistId, playlistUrl) {
+  const { error } = await sb.from("gd_rounds").update({
+    spotify_playlist_id: playlistId || null,
+    spotify_playlist_url: playlistUrl || null
+  }).eq("id", roundId);
+
+  if (error) throw error;
+}

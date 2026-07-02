@@ -12,7 +12,7 @@ function render() {
             '<div class="gd-stub-date">' + escapeHtml(name) + '</div>' +
             '<div class="gd-stub-main"><b>' + escapeHtml(sub.song_title) + '</b> — ' + escapeHtml(sub.song_artist) + '</div>' +
             spotifySmallHtml(sub) +
-            spotifyEmbedHtml(sub) +
+            spotifyPlayerHtml(sub) +
           '</div>' +
           '<div class="gd-stub-genre">Submitted</div>' +
         '</div>';
@@ -58,12 +58,14 @@ function render() {
       playerListHtml +
 
       '<div id="gd-vote-zone"></div>' +
+      '<div id="gd-music-zone"></div>' +
 
       '<p class="gd-hist-title" style="margin-top:28px;">Past Rounds</p>' +
       historyHtml;
 
     renderFormZone();
     renderVoteZone(allSubmitted);
+    renderMusicZone(allSubmitted);
   }
 
 function renderFormZone() {
@@ -107,7 +109,7 @@ function renderFormZone() {
           '<p class="gd-song-title">' + escapeHtml(existing.song_title) + '</p>' +
           '<p class="gd-song-artist">' + escapeHtml(existing.song_artist) + '</p>' +
           spotifySmallHtml(existing) +
-          spotifyEmbedHtml(existing) +
+          spotifyPlayerHtml(existing) +
           '<p class="gd-spotify-note" style="margin-top:12px;">All 5 songs are in, so submissions are locked for today.</p>' +
         '</div>';
 
@@ -168,7 +170,9 @@ function renderFormZone() {
           spotifyUrl: spotify ? spotify.spotifyUrl : null,
           spotifyEmbedUrl: spotify ? spotify.embedUrl : null,
           spotifyImage: spotify ? spotify.image : null,
-          spotifyAlbum: spotify ? spotify.album : null
+          spotifyAlbum: spotify ? spotify.album : null,
+          spotifyUri: spotify ? spotify.spotifyUri : null,
+          spotifyPreviewUrl: spotify ? spotify.previewUrl : null
         });
 
         state.submissions = await loadSubmissions(state.round.id);
@@ -202,7 +206,7 @@ function renderVoteZone(allSubmitted) {
           '<div class="gd-stub-date">' + medal + ' ' + escapeHtml(row.submission.player) + '</div>' +
           '<div class="gd-stub-main"><b>' + escapeHtml(row.submission.song_title) + '</b> — ' + escapeHtml(row.submission.song_artist) + '</div>' +
           spotifySmallHtml(row.submission) +
-          spotifyEmbedHtml(row.submission) +
+          spotifyPlayerHtml(row.submission) +
         '</div>' +
         '<div class="gd-stub-genre">' + avgText + '</div>' +
       '</div>';
@@ -260,7 +264,7 @@ function setupVoteControls(voter) {
           '<div class="gd-stub-date">' + escapeHtml(sub.player) + '</div>' +
           '<div class="gd-stub-main"><b>' + escapeHtml(sub.song_title) + '</b> — ' + escapeHtml(sub.song_artist) + '</div>' +
           spotifySmallHtml(sub) +
-          spotifyEmbedHtml(sub) +
+          spotifyPlayerHtml(sub) +
         '</div>' +
         voteControl +
       '</div>';
@@ -284,3 +288,58 @@ function setupVoteControls(voter) {
       };
     });
   }
+
+
+function renderMusicZone(allSubmitted) {
+  const zone = document.getElementById("gd-music-zone");
+  if (!zone) return;
+
+  if (!allSubmitted) {
+    zone.innerHTML = "";
+    return;
+  }
+
+  const spotifyTracks = state.submissions.filter(s => s.spotify_uri);
+  const playlistUrl = state.round.spotify_playlist_url;
+
+  const trackListHtml = state.submissions.map(function(sub, index) {
+    return '<div class="gd-stub">' +
+      '<div class="gd-stub-left">' +
+        '<div class="gd-stub-date">' + (index + 1) + '. ' + escapeHtml(sub.player) + '</div>' +
+        '<div class="gd-stub-main"><b>' + escapeHtml(sub.song_title) + '</b> — ' + escapeHtml(sub.song_artist) + '</div>' +
+      '</div>' +
+      '<div class="gd-stub-genre">' + (sub.spotify_uri ? 'Spotify' : 'Manual') + '</div>' +
+    '</div>';
+  }).join("");
+
+  zone.innerHTML =
+    '<p class="gd-hist-title" style="margin-top:28px;">Today&apos;s Mixtape</p>' +
+    '<div class="gd-ticket">' +
+      '<p class="gd-genre-label">Round playlist</p>' +
+      '<p class="gd-sub" style="margin-bottom:14px;">Create one Spotify playlist from today&apos;s five submissions.</p>' +
+      trackListHtml +
+      '<div class="gd-perf"></div>' +
+      (playlistUrl
+        ? '<a class="gd-submit-btn" style="display:block;text-align:center;text-decoration:none;" href="' + escapeHtml(playlistUrl) + '" target="_blank" rel="noopener">Open today&apos;s playlist</a>'
+        : '<button class="gd-submit-btn" id="gd-create-playlist-btn">Create Spotify playlist</button>') +
+      '<p class="gd-spotify-note">' + spotifyTracks.length + ' / ' + NAMES.length + ' submissions have Spotify track IDs. Playlist creation requires connecting Spotify once.</p>' +
+    '</div>';
+
+  const btn = document.getElementById("gd-create-playlist-btn");
+  if (!btn) return;
+
+  btn.onclick = async function() {
+    btn.disabled = true;
+    btn.textContent = isSpotifyConnected() ? "Creating playlist..." : "Connecting Spotify...";
+    try {
+      const url = await createSpotifyPlaylistForRound();
+      if (!url) return;
+      state.round.spotify_playlist_url = url;
+      render();
+    } catch (e) {
+      console.error(e);
+      btn.disabled = false;
+      btn.textContent = "Could not create playlist — try again";
+    }
+  };
+}

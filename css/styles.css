@@ -400,3 +400,14 @@ body {
 @media (max-width: 380px) {
   .gd-row2 { flex-direction: column; }
 }
+
+.gd-spotify-preview {
+  margin-top: 12px;
+  background: var(--panel-2);
+  border: 1px solid rgba(242,236,216,0.10);
+  border-radius: 12px;
+  padding: 10px;
+}
+.gd-spotify-preview audio {
+  display: block;
+}

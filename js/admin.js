@@ -202,7 +202,9 @@ async function fillDemoSongs() {
         spotifyUrl: spotify ? spotify.spotifyUrl : null,
         spotifyEmbedUrl: spotify ? spotify.embedUrl : null,
         spotifyImage: spotify ? spotify.image : null,
-        spotifyAlbum: spotify ? spotify.album : null
+        spotifyAlbum: spotify ? spotify.album : null,
+        spotifyUri: spotify ? spotify.spotifyUri : null,
+        spotifyPreviewUrl: spotify ? spotify.previewUrl : null
       });
     }
   }

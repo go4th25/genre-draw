@@ -47,6 +47,8 @@ exports.handler = async function(event) {
       album: track.album.name,
       image: track.album.images?.[0]?.url || null,
       spotifyUrl: track.external_urls.spotify,
+      spotifyUri: track.uri,
+      previewUrl: track.preview_url || null,
       embedUrl: "https://open.spotify.com/embed/track/" + track.id
     }));
 

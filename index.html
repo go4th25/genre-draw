@@ -446,7 +446,7 @@ body {
     if (!sub.spotify_embed_url) return "";
 
     return '<div class="gd-spotify-embed">' +
-      '<iframe src="' + escapeHtml(sub.spotify_embed_url) + '" width="100%" height="152" frameborder="0" allowfullscreen="" ' +
+      '<iframe src="' + escapeHtml(sub.spotify_embed_url) + '" width="100%" height="80" frameborder="0" allowfullscreen="" ' +
       'allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>' +
     '</div>';
   }
@@ -458,7 +458,7 @@ body {
       (sub.spotify_image ? '<img src="' + escapeHtml(sub.spotify_image) + '" alt="" />' : '') +
       '<div>' +
         (sub.spotify_album ? '<div class="gd-stub-date">' + escapeHtml(sub.spotify_album) + '</div>' : '') +
-        (sub.spotify_url ? '<a href="' + escapeHtml(sub.spotify_url) + '" target="_blank" rel="noopener">Open in Spotify &rarr;</a>' : '') +
+        (sub.spotify_embed_url ? '<div class="gd-stub-date" style="color:var(--cyan);margin-top:4px;">Spotify preview ready</div>' : (sub.spotify_url ? '<a href="' + escapeHtml(sub.spotify_url) + '" target="_blank" rel="noopener">Open in Spotify &rarr;</a>' : '')) +
       '</div>' +
     '</div>';
   }
@@ -623,6 +623,7 @@ body {
             '<div class="gd-stub-date">' + escapeHtml(name) + '</div>' +
             '<div class="gd-stub-main"><b>' + escapeHtml(sub.song_title) + '</b> — ' + escapeHtml(sub.song_artist) + '</div>' +
             spotifySmallHtml(sub) +
+            spotifyEmbedHtml(sub) +
           '</div>' +
           '<div class="gd-stub-genre">Submitted</div>' +
         '</div>';
@@ -789,6 +790,7 @@ body {
           '<div class="gd-stub-date">' + medal + ' ' + escapeHtml(row.submission.player) + '</div>' +
           '<div class="gd-stub-main"><b>' + escapeHtml(row.submission.song_title) + '</b> — ' + escapeHtml(row.submission.song_artist) + '</div>' +
           spotifySmallHtml(row.submission) +
+          spotifyEmbedHtml(row.submission) +
         '</div>' +
         '<div class="gd-stub-genre">' + avgText + '</div>' +
       '</div>';

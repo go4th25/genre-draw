@@ -319,34 +319,6 @@ body {
   .gd-row2 { flex-direction: column; }
 }
 </style>
-
-<style>
-.gd-player-select { margin: 18px 0; background: var(--panel); border-radius: 14px; padding: 16px; border: 1px solid rgba(242,236,216,0.08); }
-.gd-player-select label { display:block; font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
-.gd-player-select select { width:100%; background:var(--panel-2); color:var(--paper); border:1px solid rgba(242,236,216,.14); border-radius:8px; padding:11px 12px; font-family:'Space Grotesk',sans-serif; font-size:15px; }
-.gd-section { background: var(--panel); border-radius: 14px; padding: 16px; margin: 16px 0; border: 1px solid rgba(242,236,216,0.08); }
-.gd-section-title { font-family:'JetBrains Mono', monospace; font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin:0 0 12px; }
-.gd-player-grid { display:grid; gap:8px; }
-.gd-player-card { background:var(--panel-2); border-radius:10px; padding:12px; border-left:3px solid rgba(242,236,216,.12); }
-.gd-player-card.gd-has-song { border-left-color:var(--cyan); }
-.gd-player-name { font-family:'JetBrains Mono', monospace; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin:0 0 4px; }
-.gd-card-song { margin:0; font-size:15px; }
-.gd-card-song b { color:var(--paper); }
-.gd-card-empty { margin:0; color:var(--muted); font-size:13px; }
-.gd-vote-card { background:var(--panel-2); border-radius:10px; padding:14px; margin-bottom:10px; }
-.gd-vote-row { display:flex; align-items:center; gap:10px; margin-top:10px; }
-.gd-vote-row input[type=range] { flex:1; }
-.gd-score-pill { min-width:34px; text-align:center; font-family:'Anton',sans-serif; font-size:22px; color:var(--amber); }
-.gd-comment { width:100%; background:var(--panel); border:1px solid rgba(242,236,216,.14); border-radius:8px; padding:10px; color:var(--paper); font-family:'Space Grotesk',sans-serif; margin-top:8px; }
-.gd-leader-row { display:flex; justify-content:space-between; gap:10px; align-items:center; background:var(--panel-2); border-radius:10px; padding:12px; margin-bottom:8px; }
-.gd-rank { font-family:'Anton',sans-serif; color:var(--amber); font-size:24px; min-width:34px; }
-.gd-leader-main { flex:1; min-width:0; }
-.gd-leader-main p { margin:0; }
-.gd-leader-score { font-family:'Anton',sans-serif; color:var(--cyan); font-size:28px; }
-.gd-small-muted { color:var(--muted); font-size:12px; font-family:'JetBrains Mono',monospace; }
-.gd-hidden { display:none; }
-</style>
-
 </head>
 <body>
   <div class="gd-wrap" id="gd-app">
@@ -355,11 +327,12 @@ body {
 
 <script>
 (function() {
+  // ---- Your Supabase project details ----
   const SUPABASE_URL = "https://cqnpjwyldsuxkpazsoxx.supabase.co";
   const SUPABASE_KEY = "sb_publishable_UjD0ZU9zQ3SGLM0FV1uKQA_IitMevWS";
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  const PLAYERS = ["Nick", "Nani", "Trenton", "Danny", "Jace"];
+  const NAMES = ["Nick", "Nani", "Trenton", "Danny", "Jace"];
   const GENRES = [
     "City Pop", "Shoegaze", "Motown", "Bossa Nova", "90s Boom Bap",
     "Yacht Rock", "Afrobeat", "Britpop", "Synthwave", "Bluegrass",
@@ -370,234 +343,237 @@ body {
   ];
 
   const root = document.getElementById('gd-app');
-  let state = { round: null, submissions: [], votes: [], player: localStorage.getItem('gd-player') || PLAYERS[0], history: [] };
+  let state = { config: null, today: null, history: [] };
 
   function todayStr() {
     const d = new Date();
-    return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + "-" + m + "-" + day;
   }
+
   function prettyDate(iso) {
-    const p = iso.split('-').map(Number);
-    return new Date(p[0], p[1]-1, p[2]).toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
+    const parts = iso.split('-').map(Number);
+    const dt = new Date(parts[0], parts[1] - 1, parts[2]);
+    return dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
   }
-  function escapeHtml(s) { const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+    }
+    return a;
+  }
+
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
   function pickGenre(recent) {
     const pool = GENRES.filter(g => recent.indexOf(g) === -1);
     const usable = pool.length ? pool : GENRES;
     return usable[Math.floor(Math.random() * usable.length)];
   }
 
-  async function getOrCreateRound() {
-    const id = todayStr();
-    let { data, error } = await sb.from('gd_rounds').select('*').eq('id', id).maybeSingle();
+  async function getConfig() {
+    const { data, error } = await sb.from('config').select('*').eq('id', 1).maybeSingle();
     if (error) throw error;
-    if (data) return data;
-
-    const { data: recentRows, error: recentErr } = await sb.from('gd_rounds').select('genre').order('id', { ascending:false }).limit(6);
-    if (recentErr) throw recentErr;
-    const genre = pickGenre((recentRows || []).map(r => r.genre));
-
-    const { data: inserted, error: insertErr } = await sb.from('gd_rounds').insert({ id, genre }).select('*').single();
-    if (!insertErr) return inserted;
-
-    // Someone else may have opened the app at the same time and created today's round.
-    const retry = await sb.from('gd_rounds').select('*').eq('id', id).single();
-    if (retry.error) throw insertErr;
-    return retry.data;
-  }
-
-  async function loadRoundData(roundId) {
-    const [subsRes, votesRes, histRes] = await Promise.all([
-      sb.from('gd_submissions').select('*').eq('round_id', roundId).order('created_at', { ascending:true }),
-      sb.from('gd_votes').select('*').eq('round_id', roundId),
-      sb.from('gd_rounds').select('*').neq('id', roundId).order('id', { ascending:false }).limit(10)
-    ]);
-    if (subsRes.error) throw subsRes.error;
-    if (votesRes.error) throw votesRes.error;
-    if (histRes.error) throw histRes.error;
-    state.submissions = subsRes.data || [];
-    state.votes = votesRes.data || [];
-    state.history = histRes.data || [];
-  }
-
-  async function saveSubmission(song) {
-    const existing = state.submissions.find(s => s.player === state.player);
-    const payload = {
-      round_id: state.round.id,
-      player: state.player,
-      song_title: song.title,
-      song_artist: song.artist,
-      song_url: song.url || null,
-      updated_at: new Date().toISOString()
-    };
-    let result;
-    if (existing) {
-      result = await sb.from('gd_submissions').update(payload).eq('id', existing.id).select('*').single();
-    } else {
-      result = await sb.from('gd_submissions').insert(payload).select('*').single();
+    if (data) {
+      return { order: data.order_list, cursor: data.cursor, recentGenres: data.recent_genres };
     }
-    if (result.error) throw result.error;
-    await refresh();
+    const fresh = { order: shuffle(NAMES), cursor: 0, recentGenres: [] };
+    const { error: insertErr } = await sb.from('config').insert({
+      id: 1, order_list: fresh.order, cursor: fresh.cursor, recent_genres: fresh.recentGenres
+    });
+    if (insertErr) throw insertErr;
+    return fresh;
   }
 
-  async function saveVote(submissionId, score, comment) {
-    const existing = state.votes.find(v => v.voter === state.player && v.submission_id === submissionId);
-    const payload = {
-      round_id: state.round.id,
-      voter: state.player,
-      submission_id: submissionId,
-      score: Number(score),
-      comment: comment || null,
-      updated_at: new Date().toISOString()
+  async function saveConfig(config) {
+    const { error } = await sb.from('config').update({
+      order_list: config.order, cursor: config.cursor, recent_genres: config.recentGenres
+    }).eq('id', 1);
+    if (error) throw error;
+  }
+
+  async function getOrCreateToday(config) {
+    const key = todayStr();
+    const { data, error } = await sb.from('draws').select('*').eq('id', key).maybeSingle();
+    if (error) throw error;
+    if (data) return { entry: rowToEntry(data), config };
+
+    const person = config.order[config.cursor % config.order.length];
+    const genre = pickGenre(config.recentGenres);
+    const newConfig = {
+      order: (config.cursor % config.order.length === config.order.length - 1) ? shuffle(config.order) : config.order,
+      cursor: config.cursor + 1,
+      recentGenres: [genre].concat(config.recentGenres).slice(0, 6)
     };
-    let result;
-    if (existing) {
-      result = await sb.from('gd_votes').update(payload).eq('id', existing.id).select('*').single();
-    } else {
-      result = await sb.from('gd_votes').insert(payload).select('*').single();
-    }
-    if (result.error) throw result.error;
-    await refresh();
+
+    const { error: insertErr } = await sb.from('draws').insert({
+      id: key, person: person, genre: genre
+    });
+    if (insertErr) throw insertErr;
+    await saveConfig(newConfig);
+
+    return { entry: { date: key, person: person, genre: genre, song: null }, config: newConfig };
   }
 
-  function submissionFor(player) { return state.submissions.find(s => s.player === player); }
-  function voteFor(submissionId) { return state.votes.find(v => v.voter === state.player && v.submission_id === submissionId); }
-  function allSubmitted() { return PLAYERS.every(p => submissionFor(p)); }
+  function rowToEntry(row) {
+    return {
+      date: row.id,
+      person: row.person,
+      genre: row.genre,
+      song: row.song_title ? { title: row.song_title, artist: row.song_artist, url: row.song_url } : null
+    };
+  }
 
-  function leaderboard() {
-    return state.submissions.map(s => {
-      const votes = state.votes.filter(v => v.submission_id === s.id);
-      const avg = votes.length ? votes.reduce((sum,v)=>sum+Number(v.score),0) / votes.length : null;
-      return { submission: s, votes, avg };
-    }).sort((a,b) => (b.avg ?? -1) - (a.avg ?? -1));
+  async function loadHistory(excludeKey) {
+    const { data, error } = await sb.from('draws')
+      .select('*')
+      .neq('id', excludeKey)
+      .order('id', { ascending: false })
+      .limit(14);
+    if (error) throw error;
+    return (data || []).map(rowToEntry);
+  }
+
+  async function saveSong(key, song) {
+    const { error } = await sb.from('draws').update({
+      song_title: song.title, song_artist: song.artist, song_url: song.url || null
+    }).eq('id', key);
+    if (error) throw error;
   }
 
   function render() {
-    const mine = submissionFor(state.player);
-    const submittedCount = state.submissions.length;
-    const statusText = allSubmitted() ? 'Voting is live' : submittedCount + ' of ' + PLAYERS.length + ' submitted';
-    const statusDot = allSubmitted() ? 'gd-live' : 'gd-done';
+    const config = state.config;
+    const entry = state.today;
+    const history = state.history;
+
+    const upcoming = [];
+    for (let i = 0; i < 3; i++) {
+      upcoming.push(config.order[(config.cursor + i) % config.order.length]);
+    }
+
+    const statusDot = entry.song ? 'gd-done' : 'gd-live';
+    const statusText = entry.song ? 'Submitted' : 'Awaiting submission';
+
+    let historyHtml;
+    if (history.length === 0) {
+      historyHtml = '<p class="gd-empty">No history yet — today is the first draw.</p>';
+    } else {
+      historyHtml = history.map(function(h) {
+        const main = h.song
+          ? '<b>' + escapeHtml(h.song.title) + '</b> — ' + escapeHtml(h.song.artist) + ' <span style="color:var(--muted)">· ' + h.person + '</span>'
+          : '<span style="color:var(--muted)">' + h.person + ' never sent one</span>';
+        return '<div class="gd-stub">' +
+          '<div class="gd-stub-left">' +
+            '<div class="gd-stub-date">' + prettyDate(h.date) + '</div>' +
+            '<div class="gd-stub-main">' + main + '</div>' +
+          '</div>' +
+          '<div class="gd-stub-genre">' + h.genre + '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    const upnextHtml = upcoming.map(function(n, i) {
+      return '<b>' + n + '</b>' + (i < upcoming.length - 1 ? '<span class="gd-arrow">&rarr;</span>' : '');
+    }).join('');
 
     root.innerHTML =
       '<div class="gd-header">' +
         '<p class="gd-eyebrow">Group Chat Radio</p>' +
         '<h1 class="gd-title">Genre <span>Draw</span></h1>' +
-        '<p class="gd-sub">One genre. Five songs. Peer-reviewed chaos.</p>' +
+        '<p class="gd-sub">One name. One genre. One song a day.</p>' +
       '</div>' +
-      '<div class="gd-player-select"><label for="gd-player">I am</label><select id="gd-player">' +
-        PLAYERS.map(p => '<option value="'+escapeHtml(p)+'" '+(p===state.player?'selected':'')+'>'+escapeHtml(p)+'</option>').join('') +
-      '</select></div>' +
       '<div class="gd-ticket">' +
-        '<div class="gd-ticket-top"><span>Today's Round</span><span>' + prettyDate(state.round.id) + '</span></div>' +
-        '<p class="gd-drawn-for">Assigned genre</p>' +
-        '<p class="gd-person">Everyone</p>' +
-        '<p class="gd-genre-label">Make it fit</p>' +
-        '<div class="gd-genre-stamp">' + escapeHtml(state.round.genre) + '</div>' +
+        '<div class="gd-ticket-top"><span>Admit One</span><span>' + prettyDate(entry.date) + '</span></div>' +
+        '<p class="gd-drawn-for">Today\'s pick</p>' +
+        '<p class="gd-person">' + entry.person + '</p>' +
+        '<p class="gd-genre-label">Assigned genre</p>' +
+        '<div class="gd-genre-stamp">' + entry.genre + '</div>' +
         '<div class="gd-status-row"><span class="gd-dot ' + statusDot + '"></span><span>' + statusText + '</span></div>' +
         '<div class="gd-perf"></div>' +
         '<div id="gd-form-zone"></div>' +
       '</div>' +
-      '<div id="gd-submissions-zone"></div>' +
-      '<div id="gd-voting-zone"></div>' +
-      '<div id="gd-leaderboard-zone"></div>' +
-      '<p class="gd-hist-title">Past Genres</p>' +
-      '<div>' + (state.history.length ? state.history.map(h => '<div class="gd-stub"><div class="gd-stub-left"><div class="gd-stub-date">'+prettyDate(h.id)+'</div><div class="gd-stub-main"><b>'+escapeHtml(h.genre)+'</b></div></div><div class="gd-stub-genre">Round</div></div>').join('') : '<p class="gd-empty">No past rounds yet.</p>') + '</div>';
+      '<div class="gd-upnext"><span>Up next:</span>' + upnextHtml + '</div>' +
+      '<p class="gd-hist-title">Past Draws</p>' +
+      '<div id="gd-history-zone">' + historyHtml + '</div>';
 
-    document.getElementById('gd-player').onchange = function(e) {
-      state.player = e.target.value;
-      localStorage.setItem('gd-player', state.player);
-      render();
-    };
-    renderFormZone(false);
-    renderSubmissions();
-    renderVoting();
-    renderLeaderboard();
+    renderFormZone();
   }
 
   function renderFormZone(editing) {
     const zone = document.getElementById('gd-form-zone');
-    const mine = submissionFor(state.player);
-    if (mine && !editing) {
-      zone.innerHTML = '<div class="gd-submitted"><p class="gd-song-title">'+escapeHtml(mine.song_title)+'</p><p class="gd-song-artist">'+escapeHtml(mine.song_artist)+'</p>' +
-        (mine.song_url ? '<a href="'+escapeHtml(mine.song_url)+'" target="_blank" rel="noopener">Open link &rarr;</a>' : '') +
-        '</div><button class="gd-edit-link" id="gd-edit-btn">Edit my submission</button>';
-      document.getElementById('gd-edit-btn').onclick = () => renderFormZone(true);
+    const entry = state.today;
+
+    if (entry.song && !editing) {
+      zone.innerHTML =
+        '<div class="gd-submitted">' +
+          '<p class="gd-song-title">' + escapeHtml(entry.song.title) + '</p>' +
+          '<p class="gd-song-artist">' + escapeHtml(entry.song.artist) + '</p>' +
+          (entry.song.url ? '<a href="' + escapeHtml(entry.song.url) + '" target="_blank" rel="noopener">Open link &rarr;</a>' : '') +
+        '</div>' +
+        '<button class="gd-edit-link" id="gd-edit-btn">Edit submission</button>';
+      document.getElementById('gd-edit-btn').onclick = function() { renderFormZone(true); };
       return;
     }
-    zone.innerHTML = '<div class="gd-form"><div class="gd-row2">' +
-      '<div class="gd-field"><label for="gd-title">Song title</label><input id="gd-title" type="text" placeholder="e.g. Plastic Love" value="'+(mine?escapeHtml(mine.song_title):'')+'" /></div>' +
-      '<div class="gd-field"><label for="gd-artist">Artist</label><input id="gd-artist" type="text" placeholder="e.g. Mariya Takeuchi" value="'+(mine?escapeHtml(mine.song_artist):'')+'" /></div>' +
-      '</div><div class="gd-field"><label for="gd-url">Link (optional)</label><input id="gd-url" type="url" placeholder="Spotify / YouTube / Apple Music link" value="'+(mine&&mine.song_url?escapeHtml(mine.song_url):'')+'" /></div>' +
-      '<button class="gd-submit-btn" id="gd-submit-btn">'+(mine?'Update my pick':'Send it to the group')+'</button></div>';
+
+    zone.innerHTML =
+      '<div class="gd-form">' +
+        '<div class="gd-row2">' +
+          '<div class="gd-field"><label for="gd-title">Song title</label>' +
+          '<input id="gd-title" type="text" placeholder="e.g. Plastic Love" value="' + (entry.song ? escapeHtml(entry.song.title) : '') + '" /></div>' +
+          '<div class="gd-field"><label for="gd-artist">Artist</label>' +
+          '<input id="gd-artist" type="text" placeholder="e.g. Mariya Takeuchi" value="' + (entry.song ? escapeHtml(entry.song.artist) : '') + '" /></div>' +
+        '</div>' +
+        '<div class="gd-field"><label for="gd-url">Link (optional)</label>' +
+        '<input id="gd-url" type="url" placeholder="Spotify / YouTube / Apple Music link" value="' + (entry.song && entry.song.url ? escapeHtml(entry.song.url) : '') + '" /></div>' +
+        '<button class="gd-submit-btn" id="gd-submit-btn">Send it to the group</button>' +
+      '</div>';
+
     document.getElementById('gd-submit-btn').onclick = async function() {
       const title = document.getElementById('gd-title').value.trim();
       const artist = document.getElementById('gd-artist').value.trim();
       const url = document.getElementById('gd-url').value.trim();
       const btn = document.getElementById('gd-submit-btn');
-      if (!title || !artist) { btn.textContent='Add a title and artist first'; setTimeout(()=>btn.textContent=(mine?'Update my pick':'Send it to the group'),1600); return; }
-      btn.disabled = true; btn.textContent = 'Saving...';
-      try { await saveSubmission({ title, artist, url }); } catch(e) { console.error(e); btn.disabled=false; btn.textContent='Something went wrong — try again'; }
+      if (!title || !artist) {
+        btn.textContent = "Add a title and artist first";
+        setTimeout(function() { btn.textContent = "Send it to the group"; }, 1600);
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = "Sending...";
+      try {
+        await saveSong(state.today.date, { title: title, artist: artist, url: url });
+        state.today.song = { title: title, artist: artist, url: url };
+        render();
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = "Something went wrong — try again";
+        console.error(e);
+      }
     };
-  }
-
-  function renderSubmissions() {
-    document.getElementById('gd-submissions-zone').innerHTML = '<div class="gd-section"><p class="gd-section-title">Submissions</p><div class="gd-player-grid">' +
-      PLAYERS.map(p => {
-        const s = submissionFor(p);
-        return '<div class="gd-player-card '+(s?'gd-has-song':'')+'"><p class="gd-player-name">'+escapeHtml(p)+'</p>' +
-          (s ? '<p class="gd-card-song"><b>'+escapeHtml(s.song_title)+'</b> — '+escapeHtml(s.song_artist)+'</p>' : '<p class="gd-card-empty">Waiting for a pick...</p>') +
-          '</div>';
-      }).join('') + '</div></div>';
-  }
-
-  function renderVoting() {
-    const zone = document.getElementById('gd-voting-zone');
-    if (!allSubmitted()) { zone.innerHTML = '<div class="gd-section"><p class="gd-section-title">Voting</p><p class="gd-empty">Voting unlocks when all five songs are in.</p></div>'; return; }
-    const others = state.submissions.filter(s => s.player !== state.player);
-    zone.innerHTML = '<div class="gd-section"><p class="gd-section-title">Vote for genre fit</p>' + others.map(s => {
-      const v = voteFor(s.id);
-      const val = v ? v.score : 7;
-      return '<div class="gd-vote-card" data-submission="'+s.id+'"><p class="gd-player-name">'+escapeHtml(s.player)+'</p><p class="gd-card-song"><b>'+escapeHtml(s.song_title)+'</b> — '+escapeHtml(s.song_artist)+'</p>' +
-        '<div class="gd-vote-row"><input type="range" min="1" max="10" value="'+val+'" class="gd-range"><span class="gd-score-pill">'+val+'</span></div>' +
-        '<input class="gd-comment" type="text" placeholder="Optional roast / rationale" value="'+(v&&v.comment?escapeHtml(v.comment):'')+'" />' +
-        '<button class="gd-submit-btn gd-vote-btn" style="margin-top:10px">'+(v?'Update vote':'Save vote')+'</button></div>';
-    }).join('') + '</div>';
-    zone.querySelectorAll('.gd-vote-card').forEach(card => {
-      const range = card.querySelector('.gd-range');
-      const pill = card.querySelector('.gd-score-pill');
-      range.oninput = () => pill.textContent = range.value;
-      card.querySelector('.gd-vote-btn').onclick = async function() {
-        const btn = this; btn.disabled = true; btn.textContent = 'Saving...';
-        try { await saveVote(card.dataset.submission, range.value, card.querySelector('.gd-comment').value.trim()); }
-        catch(e) { console.error(e); btn.disabled = false; btn.textContent = 'Try again'; }
-      };
-    });
-  }
-
-  function renderLeaderboard() {
-    const zone = document.getElementById('gd-leaderboard-zone');
-    if (!allSubmitted()) { zone.innerHTML = ''; return; }
-    const rows = leaderboard();
-    zone.innerHTML = '<div class="gd-section"><p class="gd-section-title">Leaderboard</p>' + rows.map((r, idx) =>
-      '<div class="gd-leader-row"><div class="gd-rank">#'+(idx+1)+'</div><div class="gd-leader-main"><p><b>'+escapeHtml(r.submission.player)+'</b> · '+escapeHtml(r.submission.song_title)+' — '+escapeHtml(r.submission.song_artist)+'</p><p class="gd-small-muted">'+r.votes.length+' vote'+(r.votes.length===1?'':'s')+'</p></div><div class="gd-leader-score">'+(r.avg===null?'—':r.avg.toFixed(1))+'</div></div>'
-    ).join('') + '</div>';
-  }
-
-  async function refresh() {
-    await loadRoundData(state.round.id);
-    render();
   }
 
   async function init() {
     try {
-      state.round = await getOrCreateRound();
-      await loadRoundData(state.round.id);
+      const config = await getConfig();
+      const result = await getOrCreateToday(config);
+      const history = await loadHistory(result.entry.date);
+      state = { config: result.config, today: result.entry, history: history };
       render();
-    } catch(e) {
+    } catch (e) {
       console.error(e);
-      root.innerHTML = '<div class="gd-error">Couldn't connect to the new Genre Draw tables. Run the v1 SQL setup, then refresh.</div>';
+      root.innerHTML = '<div class="gd-error">Couldn\'t connect to the database. Check the console for details, or double-check the Supabase URL/key and that the tables were created.</div>';
     }
   }
+
   init();
 })();
 </script>

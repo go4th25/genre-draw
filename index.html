@@ -315,6 +315,37 @@ body {
 }
 .gd-error { color: var(--coral); }
 
+.gd-spotify-small {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 8px;
+}
+.gd-spotify-small img {
+  width: 42px;
+  height: 42px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.gd-spotify-small a {
+  color: var(--cyan);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(79,210,199,0.4);
+}
+.gd-spotify-embed {
+  margin-top: 12px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.gd-spotify-note {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+
 @media (max-width: 380px) {
   .gd-row2 { flex-direction: column; }
 }
@@ -391,6 +422,45 @@ body {
     const pool = GENRES.filter(g => recent.indexOf(g) === -1);
     const usable = pool.length ? pool : GENRES;
     return usable[Math.floor(Math.random() * usable.length)];
+  }
+
+  async function searchSpotify(title, artist) {
+    try {
+      const query = [title, artist].filter(Boolean).join(" ");
+      const response = await fetch("/.netlify/functions/spotify-search?q=" + encodeURIComponent(query));
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.warn("Spotify search failed", data);
+        return null;
+      }
+
+      return data.tracks && data.tracks.length ? data.tracks[0] : null;
+    } catch (e) {
+      console.warn("Spotify search unavailable", e);
+      return null;
+    }
+  }
+
+  function spotifyEmbedHtml(sub) {
+    if (!sub.spotify_embed_url) return "";
+
+    return '<div class="gd-spotify-embed">' +
+      '<iframe src="' + escapeHtml(sub.spotify_embed_url) + '" width="100%" height="152" frameborder="0" allowfullscreen="" ' +
+      'allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>' +
+    '</div>';
+  }
+
+  function spotifySmallHtml(sub) {
+    if (!sub.spotify_image && !sub.spotify_url) return "";
+
+    return '<div class="gd-spotify-small">' +
+      (sub.spotify_image ? '<img src="' + escapeHtml(sub.spotify_image) + '" alt="" />' : '') +
+      '<div>' +
+        (sub.spotify_album ? '<div class="gd-stub-date">' + escapeHtml(sub.spotify_album) + '</div>' : '') +
+        (sub.spotify_url ? '<a href="' + escapeHtml(sub.spotify_url) + '" target="_blank" rel="noopener">Open in Spotify &rarr;</a>' : '') +
+      '</div>' +
+    '</div>';
   }
 
   async function getConfig() {
@@ -475,22 +545,25 @@ body {
   async function saveSong(roundId, player, song) {
     const existing = state.submissions.find(s => s.player === player);
 
+    const payload = {
+      song_title: song.title,
+      song_artist: song.artist,
+      song_url: song.url || null,
+      spotify_url: song.spotifyUrl || null,
+      spotify_embed_url: song.spotifyEmbedUrl || null,
+      spotify_image: song.spotifyImage || null,
+      spotify_album: song.spotifyAlbum || null,
+      updated_at: new Date().toISOString()
+    };
+
     if (existing) {
-      const { error } = await sb.from("gd_submissions").update({
-        song_title: song.title,
-        song_artist: song.artist,
-        song_url: song.url || null,
-        updated_at: new Date().toISOString()
-      }).eq("id", existing.id);
+      const { error } = await sb.from("gd_submissions").update(payload).eq("id", existing.id);
       if (error) throw error;
     } else {
-      const { error } = await sb.from("gd_submissions").insert({
+      const { error } = await sb.from("gd_submissions").insert(Object.assign({
         round_id: roundId,
-        player: player,
-        song_title: song.title,
-        song_artist: song.artist,
-        song_url: song.url || null
-      });
+        player: player
+      }, payload));
       if (error) throw error;
     }
   }
@@ -549,6 +622,7 @@ body {
           '<div class="gd-stub-left">' +
             '<div class="gd-stub-date">' + escapeHtml(name) + '</div>' +
             '<div class="gd-stub-main"><b>' + escapeHtml(sub.song_title) + '</b> — ' + escapeHtml(sub.song_artist) + '</div>' +
+            spotifySmallHtml(sub) +
           '</div>' +
           '<div class="gd-stub-genre">Submitted</div>' +
         '</div>';
@@ -644,8 +718,9 @@ body {
           '<div class="gd-field"><label for="gd-artist">Artist</label>' +
           '<input id="gd-artist" type="text" placeholder="e.g. Mariya Takeuchi" value="' + (existing ? escapeHtml(existing.song_artist) : '') + '" /></div>' +
         '</div>' +
-        '<div class="gd-field"><label for="gd-url">Link (optional)</label>' +
-        '<input id="gd-url" type="url" placeholder="Spotify / YouTube / Apple Music link" value="' + (existing && existing.song_url ? escapeHtml(existing.song_url) : '') + '" /></div>' +
+        '<div class="gd-field"><label for="gd-url">Backup link (optional)</label>' +
+        '<input id="gd-url" type="url" placeholder="Optional YouTube / Apple Music / other link" value="' + (existing && existing.song_url ? escapeHtml(existing.song_url) : '') + '" /></div>' +
+        '<p class="gd-spotify-note">Spotify will be searched automatically from the title + artist.</p>' +
         '<button class="gd-submit-btn" id="gd-submit-btn">' + (existing ? 'Update your song' : 'Submit your song') + '</button>' +
       '</div>';
 
@@ -670,7 +745,19 @@ body {
       btn.textContent = "Submitting...";
 
       try {
-        await saveSong(state.round.id, player, { title: title, artist: artist, url: url });
+        btn.textContent = "Finding Spotify match...";
+        const spotify = await searchSpotify(title, artist);
+
+        await saveSong(state.round.id, player, {
+          title: spotify ? spotify.title : title,
+          artist: spotify ? spotify.artist : artist,
+          url: url,
+          spotifyUrl: spotify ? spotify.spotifyUrl : null,
+          spotifyEmbedUrl: spotify ? spotify.embedUrl : null,
+          spotifyImage: spotify ? spotify.image : null,
+          spotifyAlbum: spotify ? spotify.album : null
+        });
+
         state.submissions = await loadSubmissions(state.round.id);
         state.votes = await loadVotes(state.round.id);
         render();
@@ -701,6 +788,7 @@ body {
         '<div class="gd-stub-left">' +
           '<div class="gd-stub-date">' + medal + ' ' + escapeHtml(row.submission.player) + '</div>' +
           '<div class="gd-stub-main"><b>' + escapeHtml(row.submission.song_title) + '</b> — ' + escapeHtml(row.submission.song_artist) + '</div>' +
+          spotifySmallHtml(row.submission) +
         '</div>' +
         '<div class="gd-stub-genre">' + avgText + '</div>' +
       '</div>';
@@ -751,6 +839,8 @@ body {
         '<div class="gd-stub-left">' +
           '<div class="gd-stub-date">' + escapeHtml(sub.player) + '</div>' +
           '<div class="gd-stub-main"><b>' + escapeHtml(sub.song_title) + '</b> — ' + escapeHtml(sub.song_artist) + '</div>' +
+          spotifySmallHtml(sub) +
+          spotifyEmbedHtml(sub) +
         '</div>' +
         '<select class="gd-score-select" data-submission-id="' + sub.id + '" style="background:var(--panel-2);border:1px solid rgba(242,236,216,0.14);border-radius:8px;padding:8px;color:var(--paper);font-family:JetBrains Mono,monospace;font-size:12px;">' +
           scoreOptions(current) +

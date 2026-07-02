@@ -344,6 +344,21 @@ body {
   const root = document.getElementById("gd-app");
   let state = { config: null, round: null, submissions: [], votes: [], history: [] };
 
+  const PLAYER_KEY = "genreDrawPlayer";
+
+  function getSavedPlayer() {
+    const saved = localStorage.getItem(PLAYER_KEY);
+    return NAMES.indexOf(saved) !== -1 ? saved : null;
+  }
+
+  function savePlayer(name) {
+    if (NAMES.indexOf(name) !== -1) localStorage.setItem(PLAYER_KEY, name);
+  }
+
+  function clearSavedPlayer() {
+    localStorage.removeItem(PLAYER_KEY);
+  }
+
   function todayStr() {
     const d = new Date();
     return d.getFullYear() + "-" +
@@ -589,43 +604,57 @@ body {
 
   function renderFormZone() {
     const zone = document.getElementById("gd-form-zone");
+    const savedPlayer = getSavedPlayer();
 
-    const playerOptions = NAMES.map(function(name) {
-      return '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>';
-    }).join("");
+    if (!savedPlayer) {
+      const playerOptions = NAMES.map(function(name) {
+        return '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>';
+      }).join("");
+
+      zone.innerHTML =
+        '<div class="gd-form">' +
+          '<div class="gd-field"><label for="gd-player">Who are you?</label>' +
+            '<select id="gd-player" style="width:100%;background:var(--panel-2);border:1px solid rgba(242,236,216,0.14);border-radius:8px;padding:11px 12px;color:var(--paper);font-family:Space Grotesk,sans-serif;font-size:15px;">' +
+              playerOptions +
+            '</select>' +
+          '</div>' +
+          '<button class="gd-submit-btn" id="gd-save-player-btn">Continue</button>' +
+        '</div>';
+
+      document.getElementById("gd-save-player-btn").onclick = function() {
+        savePlayer(document.getElementById("gd-player").value);
+        render();
+      };
+
+      return;
+    }
+
+    const player = savedPlayer;
+    const existing = getSubmissionFor(player);
 
     zone.innerHTML =
       '<div class="gd-form">' +
-        '<div class="gd-field"><label for="gd-player">Who are you?</label>' +
-          '<select id="gd-player" style="width:100%;background:var(--panel-2);border:1px solid rgba(242,236,216,0.14);border-radius:8px;padding:11px 12px;color:var(--paper);font-family:Space Grotesk,sans-serif;font-size:15px;">' +
-            playerOptions +
-          '</select>' +
+        '<div class="gd-status-row" style="margin-top:0;margin-bottom:14px;">' +
+          '<span>Playing as <b>' + escapeHtml(player) + '</b></span>' +
+          '<button class="gd-edit-link" id="gd-switch-player" style="margin-left:auto;">Switch player</button>' +
         '</div>' +
         '<div class="gd-row2">' +
           '<div class="gd-field"><label for="gd-title">Song title</label>' +
-          '<input id="gd-title" type="text" placeholder="e.g. Plastic Love" /></div>' +
+          '<input id="gd-title" type="text" placeholder="e.g. Plastic Love" value="' + (existing ? escapeHtml(existing.song_title) : '') + '" /></div>' +
           '<div class="gd-field"><label for="gd-artist">Artist</label>' +
-          '<input id="gd-artist" type="text" placeholder="e.g. Mariya Takeuchi" /></div>' +
+          '<input id="gd-artist" type="text" placeholder="e.g. Mariya Takeuchi" value="' + (existing ? escapeHtml(existing.song_artist) : '') + '" /></div>' +
         '</div>' +
         '<div class="gd-field"><label for="gd-url">Link (optional)</label>' +
-        '<input id="gd-url" type="url" placeholder="Spotify / YouTube / Apple Music link" /></div>' +
-        '<button class="gd-submit-btn" id="gd-submit-btn">Submit your song</button>' +
+        '<input id="gd-url" type="url" placeholder="Spotify / YouTube / Apple Music link" value="' + (existing && existing.song_url ? escapeHtml(existing.song_url) : '') + '" /></div>' +
+        '<button class="gd-submit-btn" id="gd-submit-btn">' + (existing ? 'Update your song' : 'Submit your song') + '</button>' +
       '</div>';
 
-    const playerSelect = document.getElementById("gd-player");
-
-    function fillExisting() {
-      const sub = getSubmissionFor(playerSelect.value);
-      document.getElementById("gd-title").value = sub ? sub.song_title : "";
-      document.getElementById("gd-artist").value = sub ? sub.song_artist : "";
-      document.getElementById("gd-url").value = sub && sub.song_url ? sub.song_url : "";
-    }
-
-    playerSelect.onchange = fillExisting;
-    fillExisting();
+    document.getElementById("gd-switch-player").onclick = function() {
+      clearSavedPlayer();
+      render();
+    };
 
     document.getElementById("gd-submit-btn").onclick = async function() {
-      const player = playerSelect.value;
       const title = document.getElementById("gd-title").value.trim();
       const artist = document.getElementById("gd-artist").value.trim();
       const url = document.getElementById("gd-url").value.trim();
@@ -633,7 +662,7 @@ body {
 
       if (!title || !artist) {
         btn.textContent = "Add a title and artist first";
-        setTimeout(function() { btn.textContent = "Submit your song"; }, 1600);
+        setTimeout(function() { btn.textContent = existing ? "Update your song" : "Submit your song"; }, 1600);
         return;
       }
 
@@ -655,6 +684,7 @@ body {
 
   function renderVoteZone(allSubmitted) {
     const zone = document.getElementById("gd-vote-zone");
+    const savedPlayer = getSavedPlayer();
 
     if (!allSubmitted) {
       zone.innerHTML =
@@ -676,25 +706,31 @@ body {
       '</div>';
     }).join("");
 
+    if (!savedPlayer) {
+      zone.innerHTML =
+        '<p class="gd-hist-title" style="margin-top:28px;">Voting</p>' +
+        '<p class="gd-empty">Choose who you are above to vote.</p>' +
+        '<p class="gd-hist-title" style="margin-top:28px;">Leaderboard</p>' +
+        leaderboardHtml;
+      return;
+    }
+
     zone.innerHTML =
       '<p class="gd-hist-title" style="margin-top:28px;">Voting</p>' +
       '<div class="gd-ticket" style="margin-top:8px;">' +
         '<p class="gd-genre-label">Cast votes</p>' +
-        '<div class="gd-field"><label for="gd-voter">Who is voting?</label>' +
-          '<select id="gd-voter" style="width:100%;background:var(--panel-2);border:1px solid rgba(242,236,216,0.14);border-radius:8px;padding:11px 12px;color:var(--paper);font-family:Space Grotesk,sans-serif;font-size:15px;">' +
-            NAMES.map(function(name) { return '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>'; }).join("") +
-          '</select>' +
+        '<div class="gd-status-row" style="margin-top:0;margin-bottom:14px;">' +
+          '<span>Voting as <b>' + escapeHtml(savedPlayer) + '</b></span>' +
         '</div>' +
         '<div id="gd-vote-list"></div>' +
       '</div>' +
       '<p class="gd-hist-title" style="margin-top:28px;">Leaderboard</p>' +
       leaderboardHtml;
 
-    setupVoteControls();
+    setupVoteControls(savedPlayer);
   }
 
-  function setupVoteControls() {
-    const voterSelect = document.getElementById("gd-voter");
+  function setupVoteControls(voter) {
     const voteList = document.getElementById("gd-vote-list");
 
     function scoreOptions(current) {
@@ -705,46 +741,40 @@ body {
       return html;
     }
 
-    function redrawVoteList() {
-      const voter = voterSelect.value;
-      const voteable = state.submissions.filter(s => s.player !== voter);
+    const voteable = state.submissions.filter(s => s.player !== voter);
 
-      voteList.innerHTML = voteable.map(function(sub) {
-        const existing = getVote(voter, sub.id);
-        const current = existing ? existing.score : "";
+    voteList.innerHTML = voteable.map(function(sub) {
+      const existing = getVote(voter, sub.id);
+      const current = existing ? existing.score : "";
 
-        return '<div class="gd-stub">' +
-          '<div class="gd-stub-left">' +
-            '<div class="gd-stub-date">' + escapeHtml(sub.player) + '</div>' +
-            '<div class="gd-stub-main"><b>' + escapeHtml(sub.song_title) + '</b> — ' + escapeHtml(sub.song_artist) + '</div>' +
-          '</div>' +
-          '<select class="gd-score-select" data-submission-id="' + sub.id + '" style="background:var(--panel-2);border:1px solid rgba(242,236,216,0.14);border-radius:8px;padding:8px;color:var(--paper);font-family:JetBrains Mono,monospace;font-size:12px;">' +
-            scoreOptions(current) +
-          '</select>' +
-        '</div>';
-      }).join("");
+      return '<div class="gd-stub">' +
+        '<div class="gd-stub-left">' +
+          '<div class="gd-stub-date">' + escapeHtml(sub.player) + '</div>' +
+          '<div class="gd-stub-main"><b>' + escapeHtml(sub.song_title) + '</b> — ' + escapeHtml(sub.song_artist) + '</div>' +
+        '</div>' +
+        '<select class="gd-score-select" data-submission-id="' + sub.id + '" style="background:var(--panel-2);border:1px solid rgba(242,236,216,0.14);border-radius:8px;padding:8px;color:var(--paper);font-family:JetBrains Mono,monospace;font-size:12px;">' +
+          scoreOptions(current) +
+        '</select>' +
+      '</div>';
+    }).join("");
 
-      Array.from(document.querySelectorAll(".gd-score-select")).forEach(function(select) {
-        select.onchange = async function() {
-          const score = Number(select.value);
-          const submissionId = select.getAttribute("data-submission-id");
-          if (!score) return;
+    Array.from(document.querySelectorAll(".gd-score-select")).forEach(function(select) {
+      select.onchange = async function() {
+        const score = Number(select.value);
+        const submissionId = select.getAttribute("data-submission-id");
+        if (!score) return;
 
-          select.disabled = true;
-          try {
-            await saveVote(state.round.id, voterSelect.value, submissionId, score);
-            state.votes = await loadVotes(state.round.id);
-            render();
-          } catch (e) {
-            console.error(e);
-            select.disabled = false;
-          }
-        };
-      });
-    }
-
-    voterSelect.onchange = redrawVoteList;
-    redrawVoteList();
+        select.disabled = true;
+        try {
+          await saveVote(state.round.id, voter, submissionId, score);
+          state.votes = await loadVotes(state.round.id);
+          render();
+        } catch (e) {
+          console.error(e);
+          select.disabled = false;
+        }
+      };
+    });
   }
 
   async function init() {

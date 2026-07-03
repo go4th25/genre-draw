@@ -17,28 +17,15 @@ exports.handler = async function(event) {
     if (!accessToken) {
       return { statusCode: 401, body: JSON.stringify({ error: "Missing Spotify access token" }) };
     }
-
     if (!tracks.length) {
       return { statusCode: 400, body: JSON.stringify({ error: "No Spotify track URIs supplied" }) };
     }
 
-    const meResponse = await fetch("https://api.spotify.com/v1/me", {
-      headers: { Authorization: "Bearer " + accessToken }
-    });
-    const me = await meResponse.json();
-
-    if (!meResponse.ok) {
-  return {
-    statusCode: meResponse.status,
-    body: JSON.stringify({
-      step: "GET /me",
-      spotifyStatus: meResponse.status,
-      spotifyResponse: me
-    })
-  };
-}
-
-    const createResponse = await fetch("https://api.spotify.com/v1/users/" + encodeURIComponent(me.id) + "/playlists", {
+    // Create the playlist for the CURRENT user.
+    // Spotify removed POST /users/{user_id}/playlists for Development Mode
+    // apps as of March 2026 — POST /me/playlists is the replacement and no
+    // longer needs a separate GET /me call first.
+    const createResponse = await fetch("https://api.spotify.com/v1/me/playlists", {
       method: "POST",
       headers: {
         Authorization: "Bearer " + accessToken,
@@ -50,21 +37,21 @@ exports.handler = async function(event) {
         public: false
       })
     });
-
     const playlist = await createResponse.json();
-
     if (!createResponse.ok) {
-  return {
-    statusCode: createResponse.status,
-    body: JSON.stringify({
-      step: "CREATE PLAYLIST",
-      spotifyStatus: createResponse.status,
-      spotifyResponse: playlist
-    })
-  };
-}
+      return {
+        statusCode: createResponse.status,
+        body: JSON.stringify({
+          step: "CREATE PLAYLIST",
+          spotifyStatus: createResponse.status,
+          spotifyResponse: playlist
+        })
+      };
+    }
 
-    const addResponse = await fetch("https://api.spotify.com/v1/playlists/" + encodeURIComponent(playlist.id) + "/tracks", {
+    // Add tracks: /playlists/{id}/tracks was renamed to /playlists/{id}/items
+    // in the same Feb 2026 migration.
+    const addResponse = await fetch("https://api.spotify.com/v1/playlists/" + encodeURIComponent(playlist.id) + "/items", {
       method: "POST",
       headers: {
         Authorization: "Bearer " + accessToken,
@@ -72,19 +59,17 @@ exports.handler = async function(event) {
       },
       body: JSON.stringify({ uris: tracks })
     });
-
     const addData = await addResponse.json();
-
     if (!addResponse.ok) {
-  return {
-    statusCode: addResponse.status,
-    body: JSON.stringify({
-      step: "ADD TRACKS",
-      spotifyStatus: addResponse.status,
-      spotifyResponse: addData
-    })
-  };
-}
+      return {
+        statusCode: addResponse.status,
+        body: JSON.stringify({
+          step: "ADD TRACKS",
+          spotifyStatus: addResponse.status,
+          spotifyResponse: addData
+        })
+      };
+    }
 
     return {
       statusCode: 200,

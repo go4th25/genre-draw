@@ -138,3 +138,18 @@ async function saveRoundPlaylist(roundId, playlistId, playlistUrl) {
 
   if (error) throw error;
 }
+
+async function getMonthPlaylist(monthId) {
+  const { data, error } = await sb.from("gd_month_playlists").select("*").eq("id", monthId).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function saveMonthPlaylist(monthId, playlistId, playlistUrl) {
+  const { error } = await sb.from("gd_month_playlists").upsert({
+    id: monthId,
+    spotify_playlist_id: playlistId || null,
+    spotify_playlist_url: playlistUrl || null
+  });
+  if (error) throw error;
+}

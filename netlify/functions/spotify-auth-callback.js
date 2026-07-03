@@ -28,14 +28,14 @@ exports.handler = async function(event) {
   const tokenResponse = await fetch("https://accounts.spotify.com/api/token", {
     method: "POST",
     headers: {
-      "Authorization": "Basic " + Buffer.from(
+      Authorization: "Basic " + Buffer.from(
         process.env.SPOTIFY_CLIENT_ID + ":" + process.env.SPOTIFY_CLIENT_SECRET
       ).toString("base64"),
       "Content-Type": "application/x-www-form-urlencoded"
     },
     body: new URLSearchParams({
       grant_type: "authorization_code",
-      code: code,
+      code,
       redirect_uri: redirectUri
     }).toString()
   });
@@ -50,15 +50,17 @@ exports.handler = async function(event) {
     };
   }
 
-  const hash = new URLSearchParams({
-    spotify_access_token: tokenData.access_token,
-    spotify_refresh_token: tokenData.refresh_token || "",
-    spotify_expires_in: String(tokenData.expires_in || 3600)
-  });
-
   return {
     statusCode: 302,
-    headers: { Location: origin + returnTo + "#" + hash.toString() },
+    multiValueHeaders: {
+      "Set-Cookie": [
+        `gd_spotify_access_token=${tokenData.access_token}; Path=/; Max-Age=${tokenData.expires_in || 3600}; SameSite=Lax; Secure`,
+        `gd_spotify_refresh_token=${tokenData.refresh_token || ""}; Path=/; Max-Age=2592000; SameSite=Lax; Secure`
+      ]
+    },
+    headers: {
+      Location: origin + returnTo + "#spotify_connected=1"
+    },
     body: ""
   };
 };

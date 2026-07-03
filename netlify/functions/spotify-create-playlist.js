@@ -1,7 +1,17 @@
+function parseCookies(cookieHeader) {
+  return Object.fromEntries(
+    (cookieHeader || "")
+      .split(";")
+      .map(c => c.trim().split("="))
+      .filter(pair => pair.length === 2)
+  );
+}
+
 exports.handler = async function(event) {
   try {
     const body = JSON.parse(event.body || "{}");
-    const accessToken = body.accessToken;
+    const cookies = parseCookies(event.headers.cookie);
+    const accessToken = body.accessToken || cookies.gd_spotify_access_token;
     const tracks = Array.isArray(body.tracks) ? body.tracks : [];
 
     if (!accessToken) {
@@ -13,7 +23,7 @@ exports.handler = async function(event) {
     }
 
     const meResponse = await fetch("https://api.spotify.com/v1/me", {
-      headers: { "Authorization": "Bearer " + accessToken }
+      headers: { Authorization: "Bearer " + accessToken }
     });
     const me = await meResponse.json();
 
@@ -24,7 +34,7 @@ exports.handler = async function(event) {
     const createResponse = await fetch("https://api.spotify.com/v1/users/" + encodeURIComponent(me.id) + "/playlists", {
       method: "POST",
       headers: {
-        "Authorization": "Bearer " + accessToken,
+        Authorization: "Bearer " + accessToken,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
@@ -35,6 +45,7 @@ exports.handler = async function(event) {
     });
 
     const playlist = await createResponse.json();
+
     if (!createResponse.ok) {
       return { statusCode: createResponse.status, body: JSON.stringify({ error: playlist.error?.message || "Could not create playlist", details: playlist }) };
     }
@@ -42,13 +53,14 @@ exports.handler = async function(event) {
     const addResponse = await fetch("https://api.spotify.com/v1/playlists/" + encodeURIComponent(playlist.id) + "/tracks", {
       method: "POST",
       headers: {
-        "Authorization": "Bearer " + accessToken,
+        Authorization: "Bearer " + accessToken,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ uris: tracks })
     });
 
     const addData = await addResponse.json();
+
     if (!addResponse.ok) {
       return { statusCode: addResponse.status, body: JSON.stringify({ error: addData.error?.message || "Could not add tracks", details: addData }) };
     }

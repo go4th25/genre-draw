@@ -1,0 +1,2 @@
+[functions."spotify-sync-daily"]
+  schedule = "0 6 * * *"

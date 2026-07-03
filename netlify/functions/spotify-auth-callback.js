@@ -1,8 +1,36 @@
+const SUPABASE_URL = "https://cqnpjwyldsuxkpazsoxx.supabase.co";
+
 function decodeState(state) {
   try {
     return JSON.parse(Buffer.from(state || "", "base64url").toString("utf8"));
   } catch (_e) {
-    return { returnTo: "/" };
+    return { returnTo: "/", mode: "user" };
+  }
+}
+
+async function saveAdminToken(tokenData) {
+  const expiresAt = new Date(Date.now() + ((tokenData.expires_in || 3600) - 60) * 1000).toISOString();
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  const res = await fetch(SUPABASE_URL + "/rest/v1/gd_spotify_admin_token?on_conflict=id", {
+    method: "POST",
+    headers: {
+      apikey: key,
+      Authorization: "Bearer " + key,
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates"
+    },
+    body: JSON.stringify({
+      id: 1,
+      access_token: tokenData.access_token,
+      refresh_token: tokenData.refresh_token,
+      expires_at: expiresAt
+    })
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error("Could not save admin Spotify token: " + text);
   }
 }
 
@@ -50,6 +78,26 @@ exports.handler = async function(event) {
     };
   }
 
+  if (state.mode === "admin") {
+    try {
+      await saveAdminToken(tokenData);
+    } catch (e) {
+      return {
+        statusCode: 302,
+        headers: { Location: origin + returnTo + "#spotify_error=" + encodeURIComponent("admin_save_failed") },
+        body: ""
+      };
+    }
+
+    return {
+      statusCode: 302,
+      headers: { Location: origin + returnTo + "#spotify_admin_connected=1" },
+      body: ""
+    };
+  }
+
+  // Regular per-user cookie flow — kept for backward compatibility, no
+  // longer used by the main game now that syncing happens automatically.
   return {
     statusCode: 302,
     multiValueHeaders: {

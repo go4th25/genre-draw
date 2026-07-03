@@ -18,6 +18,11 @@ function adminPlayerOptions() {
     }).join("");
   }
 
+function spotifyAdminConnectUrl() {
+    const returnTo = window.location.pathname + window.location.search;
+    return "/.netlify/functions/spotify-auth-start?mode=admin&returnTo=" + encodeURIComponent(returnTo);
+  }
+
 function renderAdmin(message) {
     const round = state.round;
     const submittedCount = state.submissions.length;
@@ -67,6 +72,18 @@ function renderAdmin(message) {
         '</div>' +
       '</div>' +
 
+      '<p class="gd-hist-title">Spotify (app-wide)</p>' +
+      '<div class="gd-ticket">' +
+        '<div class="gd-admin-grid">' +
+          '<div class="gd-admin-stat">' +
+            '<div class="gd-admin-stat-label">Connected</div>' +
+            '<div class="gd-admin-stat-value" id="gd-spotify-status">Checking...</div>' +
+          '</div>' +
+        '</div>' +
+        '<p class="gd-spotify-note" style="margin:10px 0 14px;">Only needs to be done once, ever — after this, every round&apos;s songs sync to Spotify automatically, for everyone, with no per-player connection needed.</p>' +
+        '<a class="gd-admin-btn" style="display:inline-block;text-decoration:none;text-align:center;" href="' + spotifyAdminConnectUrl() + '">🎧 Connect Spotify (app-wide)</a>' +
+      '</div>' +
+
       '<p class="gd-hist-title">Actions</p>' +
       '<div class="gd-ticket">' +
         '<div class="gd-field"><label for="gd-admin-player">Saved player on this browser</label>' +
@@ -96,6 +113,19 @@ function renderAdmin(message) {
       recentRoundsHtml;
 
     wireAdminButtons();
+    checkSpotifyAdminStatus();
+  }
+
+async function checkSpotifyAdminStatus() {
+    const el = document.getElementById("gd-spotify-status");
+    if (!el) return;
+    try {
+      const res = await fetch("/.netlify/functions/spotify-admin-status");
+      const data = await res.json();
+      el.textContent = data.connected ? "Yes ✅" : "Not yet ❌";
+    } catch (e) {
+      el.textContent = "Unknown";
+    }
   }
 
 async function reloadAdmin(message) {

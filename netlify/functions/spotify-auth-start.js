@@ -8,13 +8,14 @@ exports.handler = async function(event) {
   const origin = proto + "://" + host;
   const redirectUri = origin + "/.netlify/functions/spotify-auth-callback";
   const returnTo = event.queryStringParameters?.returnTo || "/";
+  const mode = event.queryStringParameters?.mode === "admin" ? "admin" : "user";
 
   const params = new URLSearchParams({
     response_type: "code",
     client_id: process.env.SPOTIFY_CLIENT_ID,
     scope: process.env.SPOTIFY_PLAYLIST_SCOPES || "user-read-private playlist-modify-private playlist-modify-public",
     redirect_uri: redirectUri,
-    state: encodeState({ returnTo })
+    state: encodeState({ returnTo: returnTo, mode: mode })
   });
 
   return {

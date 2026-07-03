@@ -54,132 +54,36 @@ function spotifySmallHtml(sub) {
   '</div>';
 }
 
-function saveSpotifyTokenData(data) {
-  const expiresIn = Number(data.expires_in || 3600);
-  const expiresAt = Date.now() + ((expiresIn - 60) * 1000);
-  localStorage.setItem("gdSpotifyAccessToken", data.access_token);
-  localStorage.setItem("gdSpotifyExpiresAt", String(expiresAt));
-  if (data.refresh_token) localStorage.setItem("gdSpotifyRefreshToken", data.refresh_token);
-}
+// Fires once per page load (or once per round completion) to ask the server
+// to fold this round's songs into the month's playlist. Safe to call more
+// than once — the server no-ops if the round is already synced.
+var gdSyncTriggered = false;
 
-function handleSpotifyRedirectIfNeeded() {
-  const hash = new URLSearchParams((window.location.hash || "").replace(/^#/, ""));
-  const accessToken = hash.get("spotify_access_token");
-  const refreshToken = hash.get("spotify_refresh_token");
-  const expiresIn = hash.get("spotify_expires_in");
-  const error = hash.get("spotify_error");
+function triggerAutoPlaylistSync(roundId) {
+  if (gdSyncTriggered) return;
+  gdSyncTriggered = true;
 
-  if (error) {
-    console.error("Spotify authorization failed", error);
-    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-    return false;
-  }
-
-  if (!accessToken) return false;
-
-  saveSpotifyTokenData({
-    access_token: accessToken,
-    refresh_token: refreshToken,
-    expires_in: expiresIn || 3600
-  });
-
-  window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-  return true;
-}
-
-function isSpotifyConnected() {
-  return !!localStorage.getItem("gdSpotifyAccessToken") || !!localStorage.getItem("gdSpotifyRefreshToken");
-}
-
-function clearSpotifyConnection() {
-  localStorage.removeItem("gdSpotifyAccessToken");
-  localStorage.removeItem("gdSpotifyRefreshToken");
-  localStorage.removeItem("gdSpotifyExpiresAt");
-}
-
-function connectSpotifyForPlaylists() {
-  localStorage.setItem("gdPendingPlaylist", "1");
-  const returnTo = window.location.pathname + window.location.search;
-  window.location.href = "/.netlify/functions/spotify-auth-start?returnTo=" + encodeURIComponent(returnTo);
-}
-
-async function getSpotifyAccessToken() {
-  const token = localStorage.getItem("gdSpotifyAccessToken");
-  const expiresAt = Number(localStorage.getItem("gdSpotifyExpiresAt") || 0);
-  if (token && Date.now() < expiresAt) return token;
-
-  const refreshToken = localStorage.getItem("gdSpotifyRefreshToken");
-  if (!refreshToken) return null;
-
-  const response = await fetch("/.netlify/functions/spotify-refresh-token", {
+  fetch("/.netlify/functions/spotify-sync-playlist", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refreshToken: refreshToken })
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    console.error("Spotify refresh failed", data);
-    clearSpotifyConnection();
-    return null;
-  }
-
-  saveSpotifyTokenData(data);
-  return data.access_token;
-}
-
-async function createSpotifyPlaylistForRound() {
-  const tracks = state.submissions
-    .map(s => s.spotify_uri)
-    .filter(Boolean);
-
-  if (!tracks.length) {
-    alert("No Spotify track IDs found.");
-    return null;
-  }
-
-  const response = await fetch("/.netlify/functions/spotify-create-playlist", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({
-      playlistName: "Genre Draw — " + state.round.id + " — " + state.round.genre,
-      description: "Genre Draw daily playlist for " + state.round.genre + ".",
-      tracks: tracks
+    body: JSON.stringify({ roundId: roundId })
+  })
+    .then(async function(res) {
+      const data = await res.json();
+      if (!res.ok) {
+        console.warn("Playlist sync did not complete", data);
+        gdSyncTriggered = false;
+        return;
+      }
+      if (data.playlistUrl) {
+        state.round.spotify_playlist_id = data.playlistId;
+        state.round.spotify_playlist_url = data.playlistUrl;
+        state.monthPlaylistUrl = data.playlistUrl;
+        renderMusicZone(true);
+      }
     })
-  });
-
-  const data = await response.json();
-
-  if (response.status === 401) {
-    window.location.href =
-      "/.netlify/functions/spotify-auth-start?returnTo=" +
-      encodeURIComponent(window.location.pathname + window.location.search);
-    return null;
-  }
-
-  if (!response.ok) {
-    alert(JSON.stringify(data, null, 2));
-    console.error("Spotify playlist error", data);
-    return null;
-  }
-
-  const { error } = await sb
-    .from("gd_rounds")
-    .update({
-      spotify_playlist_id: data.playlistId,
-      spotify_playlist_url: data.playlistUrl
-    })
-    .eq("id", state.round.id);
-
-  if (error) {
-    alert("Playlist was created, but saving to Supabase failed.");
-    console.error("Supabase playlist save error", error);
-    return data.playlistUrl;
-  }
-
-  state.round.spotify_playlist_id = data.playlistId;
-  state.round.spotify_playlist_url = data.playlistUrl;
-
-  return data.playlistUrl;
+    .catch(function(e) {
+      console.warn("Playlist sync error", e);
+      gdSyncTriggered = false;
+    });
 }

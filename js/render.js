@@ -300,7 +300,9 @@ function renderMusicZone(allSubmitted) {
   }
 
   const spotifyTracks = state.submissions.filter(s => s.spotify_uri);
-  const playlistUrl = state.round.spotify_playlist_url;
+  const monthId = monthIdFromDay(state.round.id);
+  const monthName = monthLabel(monthId);
+  const playlistUrl = state.round.spotify_playlist_url || state.monthPlaylistUrl;
 
   const trackListHtml = state.submissions.map(function(sub, index) {
     return '<div class="gd-stub">' +
@@ -312,34 +314,27 @@ function renderMusicZone(allSubmitted) {
     '</div>';
   }).join("");
 
+  const statusHtml = state.round.spotify_playlist_url
+    ? '<a class="gd-submit-btn" style="display:block;text-align:center;text-decoration:none;" href="' + escapeHtml(state.round.spotify_playlist_url) + '" target="_blank" rel="noopener">Open the ' + escapeHtml(monthName) + ' playlist</a>'
+    : (spotifyTracks.length
+      ? '<p class="gd-spotify-note" style="text-align:center;">Adding today&apos;s songs to Spotify automatically...</p>'
+      : '<p class="gd-spotify-note" style="text-align:center;">No Spotify matches were found today, so nothing to add automatically.</p>');
+
   zone.innerHTML =
-    '<p class="gd-hist-title" style="margin-top:28px;">Today&apos;s Mixtape</p>' +
+    '<p class="gd-hist-title" style="margin-top:28px;">Monthly Mixtape</p>' +
     '<div class="gd-ticket">' +
-      '<p class="gd-genre-label">Round playlist</p>' +
-      '<p class="gd-sub" style="margin-bottom:14px;">Create one Spotify playlist from today&apos;s five submissions.</p>' +
+      '<p class="gd-genre-label">' + escapeHtml(monthName) + ' playlist</p>' +
+      '<p class="gd-sub" style="margin-bottom:14px;">Today&apos;s five picks are added automatically to the running ' + escapeHtml(monthName) + ' playlist.</p>' +
       trackListHtml +
       '<div class="gd-perf"></div>' +
-      (playlistUrl
-        ? '<a class="gd-submit-btn" style="display:block;text-align:center;text-decoration:none;" href="' + escapeHtml(playlistUrl) + '" target="_blank" rel="noopener">Open today&apos;s playlist</a>'
-        : '<button class="gd-submit-btn" id="gd-create-playlist-btn">Create Spotify playlist</button>') +
-      '<p class="gd-spotify-note">' + spotifyTracks.length + ' / ' + NAMES.length + ' submissions have Spotify track IDs. Playlist creation requires connecting Spotify once.</p>' +
+      statusHtml +
+      '<p class="gd-spotify-note">' + spotifyTracks.length + ' / ' + NAMES.length + ' submissions have Spotify track IDs.</p>' +
+      (!state.round.spotify_playlist_url && state.monthPlaylistUrl
+        ? '<a class="gd-edit-link" style="display:block;margin-top:10px;" href="' + escapeHtml(state.monthPlaylistUrl) + '" target="_blank" rel="noopener">View the ' + escapeHtml(monthName) + ' playlist so far &rarr;</a>'
+        : '') +
     '</div>';
 
-  const btn = document.getElementById("gd-create-playlist-btn");
-  if (!btn) return;
-
-  btn.onclick = async function() {
-    btn.disabled = true;
-    btn.textContent = isSpotifyConnected() ? "Creating playlist..." : "Connecting Spotify...";
-    try {
-      const url = await createSpotifyPlaylistForRound();
-      if (!url) return;
-      state.round.spotify_playlist_url = url;
-      render();
-    } catch (e) {
-      console.error(e);
-      btn.disabled = false;
-      btn.textContent = "Could not create playlist — try again";
-    }
-  };
+  if (!state.round.spotify_playlist_url && spotifyTracks.length) {
+    triggerAutoPlaylistSync(state.round.id);
+  }
 }

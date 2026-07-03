@@ -1,29 +1,20 @@
 async function init() {
   try {
-    handleSpotifyRedirectIfNeeded();
-
     const config = await getConfig();
     const result = await getOrCreateRound(config);
     const submissions = await loadSubmissions(result.round.id);
     const votes = await loadVotes(result.round.id);
     const history = await loadHistory(result.round.id);
+    const monthPlaylist = await getMonthPlaylist(monthIdFromDay(result.round.id));
 
     state = {
       config: result.config,
       round: result.round,
       submissions: submissions,
       votes: votes,
-      history: history
+      history: history,
+      monthPlaylistUrl: monthPlaylist ? monthPlaylist.spotify_playlist_url : null
     };
-
-    if (!isAdminMode() && localStorage.getItem("gdPendingPlaylist") === "1" && isSpotifyConnected()) {
-      localStorage.removeItem("gdPendingPlaylist");
-      try {
-        await createSpotifyPlaylistForRound();
-      } catch (playlistError) {
-        console.warn("Pending Spotify playlist creation failed", playlistError);
-      }
-    }
 
     if (isAdminMode()) {
       renderAdmin();

@@ -39,3 +39,13 @@ function pickGenre(recent) {
     const usable = pool.length ? pool : GENRES;
     return usable[Math.floor(Math.random() * usable.length)];
   }
+
+function monthIdFromDay(dayId) {
+    return dayId.slice(0, 7); // 'YYYY-MM-DD' -> 'YYYY-MM'
+  }
+
+function monthLabel(monthId) {
+    const parts = monthId.split("-").map(Number);
+    const dt = new Date(parts[0], parts[1] - 1, 1);
+    return dt.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  }

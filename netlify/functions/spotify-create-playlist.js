@@ -28,8 +28,15 @@ exports.handler = async function(event) {
     const me = await meResponse.json();
 
     if (!meResponse.ok) {
-      return { statusCode: meResponse.status, body: JSON.stringify({ error: me.error?.message || "Could not load Spotify profile", details: me }) };
-    }
+  return {
+    statusCode: meResponse.status,
+    body: JSON.stringify({
+      step: "GET /me",
+      spotifyStatus: meResponse.status,
+      spotifyResponse: me
+    })
+  };
+}
 
     const createResponse = await fetch("https://api.spotify.com/v1/users/" + encodeURIComponent(me.id) + "/playlists", {
       method: "POST",
@@ -47,8 +54,15 @@ exports.handler = async function(event) {
     const playlist = await createResponse.json();
 
     if (!createResponse.ok) {
-      return { statusCode: createResponse.status, body: JSON.stringify({ error: playlist.error?.message || "Could not create playlist", details: playlist }) };
-    }
+  return {
+    statusCode: createResponse.status,
+    body: JSON.stringify({
+      step: "CREATE PLAYLIST",
+      spotifyStatus: createResponse.status,
+      spotifyResponse: playlist
+    })
+  };
+}
 
     const addResponse = await fetch("https://api.spotify.com/v1/playlists/" + encodeURIComponent(playlist.id) + "/tracks", {
       method: "POST",
@@ -62,8 +76,15 @@ exports.handler = async function(event) {
     const addData = await addResponse.json();
 
     if (!addResponse.ok) {
-      return { statusCode: addResponse.status, body: JSON.stringify({ error: addData.error?.message || "Could not add tracks", details: addData }) };
-    }
+  return {
+    statusCode: addResponse.status,
+    body: JSON.stringify({
+      step: "ADD TRACKS",
+      spotifyStatus: addResponse.status,
+      spotifyResponse: addData
+    })
+  };
+}
 
     return {
       statusCode: 200,

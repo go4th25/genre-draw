@@ -159,7 +159,7 @@ async function createSpotifyPlaylistForRound() {
   }
 
   if (!response.ok) {
-    alert("Spotify playlist error: " + (data.error || "Unknown error"));
+    alert(JSON.stringify(data, null, 2));
     console.error("Spotify playlist error", data);
     return null;
   }

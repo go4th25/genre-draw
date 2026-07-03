@@ -12,7 +12,7 @@ exports.handler = async function(event) {
   const params = new URLSearchParams({
     response_type: "code",
     client_id: process.env.SPOTIFY_CLIENT_ID,
-    scope: process.env.SPOTIFY_PLAYLIST_SCOPES || "playlist-modify-private playlist-modify-public",
+    scope: process.env.SPOTIFY_PLAYLIST_SCOPES || "user-read-private playlist-modify-private playlist-modify-public",
     redirect_uri: redirectUri,
     state: encodeState({ returnTo })
   });

@@ -129,25 +129,20 @@ async function getSpotifyAccessToken() {
 }
 
 async function createSpotifyPlaylistForRound() {
-  const token = await getSpotifyAccessToken();
-  if (!token) {
-    connectSpotifyForPlaylists();
-    return null;
-  }
-
   const tracks = state.submissions
-    .filter(s => s.spotify_uri)
-    .map(s => s.spotify_uri);
+    .map(s => s.spotify_uri)
+    .filter(Boolean);
 
   if (!tracks.length) {
-    throw new Error("No Spotify tracks are available for this round yet.");
+    alert("No Spotify track IDs found.");
+    return null;
   }
 
   const response = await fetch("/.netlify/functions/spotify-create-playlist", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify({
-      accessToken: token,
       playlistName: "Genre Draw — " + state.round.id + " — " + state.round.genre,
       description: "Genre Draw daily playlist for " + state.round.genre + ".",
       tracks: tracks
@@ -157,17 +152,34 @@ async function createSpotifyPlaylistForRound() {
   const data = await response.json();
 
   if (response.status === 401) {
-    clearSpotifyConnection();
-    connectSpotifyForPlaylists();
+    window.location.href =
+      "/.netlify/functions/spotify-auth-start?returnTo=" +
+      encodeURIComponent(window.location.pathname + window.location.search);
     return null;
   }
 
   if (!response.ok) {
-    throw new Error(data.error || "Could not create Spotify playlist.");
+    alert("Spotify playlist error: " + (data.error || "Unknown error"));
+    console.error("Spotify playlist error", data);
+    return null;
   }
 
-  await saveRoundPlaylist(state.round.id, data.playlistId, data.playlistUrl);
+  const { error } = await sb
+    .from("gd_rounds")
+    .update({
+      spotify_playlist_id: data.playlistId,
+      spotify_playlist_url: data.playlistUrl
+    })
+    .eq("id", state.round.id);
+
+  if (error) {
+    alert("Playlist was created, but saving to Supabase failed.");
+    console.error("Supabase playlist save error", error);
+    return data.playlistUrl;
+  }
+
   state.round.spotify_playlist_id = data.playlistId;
   state.round.spotify_playlist_url = data.playlistUrl;
+
   return data.playlistUrl;
 }

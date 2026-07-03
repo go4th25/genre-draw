@@ -1,5 +1,6 @@
 async function init() {
   try {
+    handleSpotifyRedirectIfNeeded();
 
     const config = await getConfig();
     const result = await getOrCreateRound(config);

@@ -54,97 +54,53 @@ function spotifySmallHtml(sub) {
   '</div>';
 }
 
-function getSpotifyRedirectUri() {
-  return window.location.origin + window.location.pathname;
-}
-
-function randomString(length) {
-  const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  const values = new Uint8Array(length);
-  window.crypto.getRandomValues(values);
-  return Array.from(values).map(x => possible[x % possible.length]).join("");
-}
-
-async function sha256(plain) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(plain);
-  return await window.crypto.subtle.digest("SHA-256", data);
-}
-
-function base64UrlEncode(buffer) {
-  return btoa(String.fromCharCode.apply(null, new Uint8Array(buffer)))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
-}
-
-async function connectSpotifyForPlaylists() {
-  localStorage.setItem("gdPendingPlaylist", "1");
-  const verifier = randomString(64);
-  const challenge = base64UrlEncode(await sha256(verifier));
-  localStorage.setItem("gdSpotifyCodeVerifier", verifier);
-
-  const params = new URLSearchParams({
-    response_type: "code",
-    client_id: SPOTIFY_CLIENT_ID,
-    scope: SPOTIFY_SCOPES,
-    redirect_uri: getSpotifyRedirectUri(),
-    code_challenge_method: "S256",
-    code_challenge: challenge,
-    state: "genre-draw-playlist"
-  });
-
-  window.location.href = "https://accounts.spotify.com/authorize?" + params.toString();
-}
-
-async function handleSpotifyRedirectIfNeeded() {
-  const params = new URLSearchParams(window.location.search);
-  const code = params.get("code");
-  const stateParam = params.get("state");
-
-  if (!code || stateParam !== "genre-draw-playlist") return false;
-
-  const verifier = localStorage.getItem("gdSpotifyCodeVerifier");
-  if (!verifier) return false;
-
-  const body = new URLSearchParams({
-    client_id: SPOTIFY_CLIENT_ID,
-    grant_type: "authorization_code",
-    code: code,
-    redirect_uri: getSpotifyRedirectUri(),
-    code_verifier: verifier
-  });
-
-  const response = await fetch("https://accounts.spotify.com/api/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: body.toString()
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    console.error("Spotify authorization failed", data);
-    localStorage.removeItem("gdSpotifyCodeVerifier");
-    return false;
-  }
-
-  saveSpotifyTokenData(data);
-  localStorage.removeItem("gdSpotifyCodeVerifier");
-
-  const cleanUrl = window.location.origin + window.location.pathname;
-  window.history.replaceState({}, document.title, cleanUrl);
-  return true;
-}
-
 function saveSpotifyTokenData(data) {
-  const expiresAt = Date.now() + ((data.expires_in || 3600) - 60) * 1000;
+  const expiresIn = Number(data.expires_in || 3600);
+  const expiresAt = Date.now() + ((expiresIn - 60) * 1000);
   localStorage.setItem("gdSpotifyAccessToken", data.access_token);
   localStorage.setItem("gdSpotifyExpiresAt", String(expiresAt));
   if (data.refresh_token) localStorage.setItem("gdSpotifyRefreshToken", data.refresh_token);
 }
 
+function handleSpotifyRedirectIfNeeded() {
+  const hash = new URLSearchParams((window.location.hash || "").replace(/^#/, ""));
+  const accessToken = hash.get("spotify_access_token");
+  const refreshToken = hash.get("spotify_refresh_token");
+  const expiresIn = hash.get("spotify_expires_in");
+  const error = hash.get("spotify_error");
+
+  if (error) {
+    console.error("Spotify authorization failed", error);
+    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+    return false;
+  }
+
+  if (!accessToken) return false;
+
+  saveSpotifyTokenData({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    expires_in: expiresIn || 3600
+  });
+
+  window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+  return true;
+}
+
 function isSpotifyConnected() {
   return !!localStorage.getItem("gdSpotifyAccessToken") || !!localStorage.getItem("gdSpotifyRefreshToken");
+}
+
+function clearSpotifyConnection() {
+  localStorage.removeItem("gdSpotifyAccessToken");
+  localStorage.removeItem("gdSpotifyRefreshToken");
+  localStorage.removeItem("gdSpotifyExpiresAt");
+}
+
+function connectSpotifyForPlaylists() {
+  localStorage.setItem("gdPendingPlaylist", "1");
+  const returnTo = window.location.pathname + window.location.search;
+  window.location.href = "/.netlify/functions/spotify-auth-start?returnTo=" + encodeURIComponent(returnTo);
 }
 
 async function getSpotifyAccessToken() {
@@ -155,16 +111,10 @@ async function getSpotifyAccessToken() {
   const refreshToken = localStorage.getItem("gdSpotifyRefreshToken");
   if (!refreshToken) return null;
 
-  const body = new URLSearchParams({
-    client_id: SPOTIFY_CLIENT_ID,
-    grant_type: "refresh_token",
-    refresh_token: refreshToken
-  });
-
-  const response = await fetch("https://accounts.spotify.com/api/token", {
+  const response = await fetch("/.netlify/functions/spotify-refresh-token", {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: body.toString()
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshToken: refreshToken })
   });
 
   const data = await response.json();
@@ -178,17 +128,10 @@ async function getSpotifyAccessToken() {
   return data.access_token;
 }
 
-function clearSpotifyConnection() {
-  localStorage.removeItem("gdSpotifyAccessToken");
-  localStorage.removeItem("gdSpotifyRefreshToken");
-  localStorage.removeItem("gdSpotifyExpiresAt");
-  localStorage.removeItem("gdSpotifyCodeVerifier");
-}
-
 async function createSpotifyPlaylistForRound() {
   const token = await getSpotifyAccessToken();
   if (!token) {
-    await connectSpotifyForPlaylists();
+    connectSpotifyForPlaylists();
     return null;
   }
 
@@ -200,42 +143,31 @@ async function createSpotifyPlaylistForRound() {
     throw new Error("No Spotify tracks are available for this round yet.");
   }
 
-  const meResponse = await fetch("https://api.spotify.com/v1/me", {
-    headers: { "Authorization": "Bearer " + token }
-  });
-  const me = await meResponse.json();
-  if (!meResponse.ok) throw new Error(me.error?.message || "Could not load Spotify profile.");
-
-  const playlistName = "Genre Draw — " + state.round.id + " — " + state.round.genre;
-  const createResponse = await fetch("https://api.spotify.com/v1/users/" + encodeURIComponent(me.id) + "/playlists", {
+  const response = await fetch("/.netlify/functions/spotify-create-playlist", {
     method: "POST",
-    headers: {
-      "Authorization": "Bearer " + token,
-      "Content-Type": "application/json"
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      name: playlistName,
+      accessToken: token,
+      playlistName: "Genre Draw — " + state.round.id + " — " + state.round.genre,
       description: "Genre Draw daily playlist for " + state.round.genre + ".",
-      public: false
+      tracks: tracks
     })
   });
-  const playlist = await createResponse.json();
-  if (!createResponse.ok) throw new Error(playlist.error?.message || "Could not create playlist.");
 
-  const addResponse = await fetch("https://api.spotify.com/v1/playlists/" + encodeURIComponent(playlist.id) + "/tracks", {
-    method: "POST",
-    headers: {
-      "Authorization": "Bearer " + token,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ uris: tracks })
-  });
-  const addData = await addResponse.json();
-  if (!addResponse.ok) throw new Error(addData.error?.message || "Could not add tracks to playlist.");
+  const data = await response.json();
 
-  const playlistUrl = playlist.external_urls.spotify;
-  await saveRoundPlaylist(state.round.id, playlist.id, playlistUrl);
-  state.round.spotify_playlist_id = playlist.id;
-  state.round.spotify_playlist_url = playlistUrl;
-  return playlistUrl;
+  if (response.status === 401) {
+    clearSpotifyConnection();
+    connectSpotifyForPlaylists();
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error(data.error || "Could not create Spotify playlist.");
+  }
+
+  await saveRoundPlaylist(state.round.id, data.playlistId, data.playlistUrl);
+  state.round.spotify_playlist_id = data.playlistId;
+  state.round.spotify_playlist_url = data.playlistUrl;
+  return data.playlistUrl;
 }

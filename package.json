@@ -1,0 +1,24 @@
+{
+  "name": "genre-draw",
+  "version": "1.0.0",
+  "description": "",
+  "private": true,
+  "scripts": {
+    "dev": "netlify dev"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/go4th25/genre-draw.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/go4th25/genre-draw/issues"
+  },
+  "homepage": "https://github.com/go4th25/genre-draw#readme",
+  "devDependencies": {
+    "netlify-cli": "^26.1.0"
+  }
+}

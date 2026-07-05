@@ -37,16 +37,16 @@ async function getOrCreateRound(config) {
     if (error) throw error;
     if (data) return { round: data, config: config };
 
-    const genre = pickGenre(config.recentGenres);
+    const prompt = pickPrompt(config.recentGenres);
     const newConfig = {
       order: config.order,
       cursor: config.cursor,
-      recentGenres: [genre].concat(config.recentGenres).slice(0, 6)
+      recentGenres: [prompt].concat(config.recentGenres).slice(0, 6)
     };
 
     const { data: inserted, error: insertErr } = await sb
       .from("gd_rounds")
-      .insert({ id: id, genre: genre })
+      .insert({ id: id, genre: prompt })
       .select()
       .single();
 
@@ -62,16 +62,6 @@ async function loadSubmissions(roundId) {
       .select("*")
       .eq("round_id", roundId)
       .order("created_at", { ascending: true });
-
-    if (error) throw error;
-    return data || [];
-  }
-
-async function loadVotes(roundId) {
-    const { data, error } = await sb
-      .from("gd_votes")
-      .select("*")
-      .eq("round_id", roundId);
 
     if (error) throw error;
     return data || [];
@@ -105,16 +95,15 @@ async function saveSong(roundId, player, song) {
     }
   }
 
-async function saveVote(roundId, voter, submissionId, score) {
-    const { error } = await sb.from("gd_votes").upsert({
-      round_id: roundId,
-      voter: voter,
-      submission_id: submissionId,
-      score: score,
-      updated_at: new Date().toISOString()
-    }, { onConflict: "round_id,voter,submission_id" });
+async function loadRecentSubmissionDays() {
+    const { data, error } = await sb
+      .from("gd_submissions")
+      .select("round_id, player")
+      .order("round_id", { ascending: false })
+      .limit(2000);
 
     if (error) throw error;
+    return data || [];
   }
 
 async function loadHistory(excludeKey) {

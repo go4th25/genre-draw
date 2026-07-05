@@ -94,6 +94,23 @@ function monthLabel(monthId) {
   return dt.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
 }
 
+async function getPlaylistTrackUris(accessToken, playlistId) {
+  const uris = new Set();
+  let url = "https://api.spotify.com/v1/playlists/" + encodeURIComponent(playlistId) + "/tracks?fields=items(track(uri)),next&limit=100";
+
+  while (url) {
+    const res = await fetch(url, { headers: { Authorization: "Bearer " + accessToken } });
+    const data = await res.json();
+    if (!res.ok) throw new Error("GET PLAYLIST TRACKS failed: " + JSON.stringify(data));
+    for (const item of data.items || []) {
+      if (item.track && item.track.uri) uris.add(item.track.uri);
+    }
+    url = data.next || null;
+  }
+
+  return uris;
+}
+
 exports.handler = async function(event) {
   try {
     const body = JSON.parse(event.body || "{}");
@@ -153,14 +170,19 @@ exports.handler = async function(event) {
       await sbUpsert("gd_month_playlists", { id: monthId, spotify_playlist_id: playlistId, spotify_playlist_url: playlistUrl }, "id");
     }
 
-    const addResponse = await fetch("https://api.spotify.com/v1/playlists/" + encodeURIComponent(playlistId) + "/items", {
-      method: "POST",
-      headers: { Authorization: "Bearer " + accessToken, "Content-Type": "application/json" },
-      body: JSON.stringify({ uris: tracks })
-    });
-    const addData = await addResponse.json();
-    if (!addResponse.ok) {
-      return { statusCode: addResponse.status, body: JSON.stringify({ step: "ADD TRACKS", spotifyResponse: addData }) };
+    const existingUris = await getPlaylistTrackUris(accessToken, playlistId);
+    const newTracks = tracks.filter(uri => !existingUris.has(uri));
+
+    if (newTracks.length) {
+      const addResponse = await fetch("https://api.spotify.com/v1/playlists/" + encodeURIComponent(playlistId) + "/items", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + accessToken, "Content-Type": "application/json" },
+        body: JSON.stringify({ uris: newTracks })
+      });
+      const addData = await addResponse.json();
+      if (!addResponse.ok) {
+        return { statusCode: addResponse.status, body: JSON.stringify({ step: "ADD TRACKS", spotifyResponse: addData }) };
+      }
     }
 
     await sbPatch("gd_rounds", "id=eq." + roundId, {
@@ -168,7 +190,15 @@ exports.handler = async function(event) {
       spotify_playlist_url: playlistUrl
     });
 
-    return { statusCode: 200, body: JSON.stringify({ playlistId: playlistId, playlistUrl: playlistUrl, added: tracks.length }) };
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        playlistId: playlistId,
+        playlistUrl: playlistUrl,
+        added: newTracks.length,
+        skippedDuplicates: tracks.length - newTracks.length
+      })
+    };
   } catch (err) {
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }

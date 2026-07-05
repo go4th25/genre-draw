@@ -9,15 +9,24 @@ var SPOTIFY_CLIENT_ID = "a68172651aec491c944c7718b0cee268";
 var SPOTIFY_SCOPES = "playlist-modify-private playlist-modify-public";
 
 var NAMES = ["Nick", "Nani", "Trenton", "Danny", "Jace"];
-var GENRES = [
-  "City Pop", "Shoegaze", "Motown", "Bossa Nova", "90s Boom Bap",
-  "Yacht Rock", "Afrobeat", "Britpop", "Synthwave", "Bluegrass",
-  "K-Pop", "Reggaeton", "Dream Pop", "Funk", "Disco",
-  "Post-Punk", "Trip-Hop", "Flamenco Pop", "Deep Soul", "Grunge",
-  "Ambient", "Jazz Fusion", "Country Pop", "Emo Revival", "Doo-Wop",
-  "Neo-Soul", "Math Rock", "Baroque Pop", "Ska", "Industrial"
+var PROMPTS = [
+  "Songs that mention a color", "Road trip, 2010s", "One-word song titles",
+  "Songs that sound like a fever dream", "Sunday morning, no rush",
+  "Songs with a number in the title", "A guilty pleasure from middle school",
+  "Songs that mention rain or weather", "Late night drive, windows down",
+  "A song your parents played too much", "Songs that namecheck a city",
+  "Beach day, 2000s", "Songs with a question in the title",
+  "First dance at a wedding", "Songs that mention food",
+  "Villain origin story soundtrack", "Songs under 3 minutes",
+  "A song that peaked at a party", "Songs with a season in the title",
+  "Studying for a test you didn't prepare for", "Songs that mention an animal",
+  "Breakup, but make it upbeat", "Songs with a day of the week in the title",
+  "A song you'd play for aliens as proof humanity was fine",
+  "Songs that start with a scream, shout, or yell", "Getting ready to go out, 1990s",
+  "Songs that mention money", "A slow burn that explodes halfway through",
+  "Songs with a name in the title", "The last song on the aux before everyone goes home"
 ];
 
 var root = document.getElementById("gd-app");
-var state = { config: null, round: null, submissions: [], votes: [], history: [] };
+var state = { config: null, round: null, submissions: [], history: [], streaks: {} };
 var PLAYER_KEY = "genreDrawPlayer";

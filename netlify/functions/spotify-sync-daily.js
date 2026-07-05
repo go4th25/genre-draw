@@ -106,6 +106,23 @@ function yesterdayDateStr() {
   return y + "-" + m + "-" + d;
 }
 
+async function getPlaylistTrackUris(accessToken, playlistId) {
+  const uris = new Set();
+  let url = "https://api.spotify.com/v1/playlists/" + encodeURIComponent(playlistId) + "/tracks?fields=items(track(uri)),next&limit=100";
+
+  while (url) {
+    const res = await fetch(url, { headers: { Authorization: "Bearer " + accessToken } });
+    const data = await res.json();
+    if (!res.ok) throw new Error("GET PLAYLIST TRACKS failed: " + JSON.stringify(data));
+    for (const item of data.items || []) {
+      if (item.track && item.track.uri) uris.add(item.track.uri);
+    }
+    url = data.next || null;
+  }
+
+  return uris;
+}
+
 async function syncRound(roundId) {
   const accessToken = await getValidAdminAccessToken();
   if (!accessToken) {
@@ -150,14 +167,19 @@ async function syncRound(roundId) {
     await sbUpsert("gd_month_playlists", { id: monthId, spotify_playlist_id: playlistId, spotify_playlist_url: playlistUrl }, "id");
   }
 
-  const addResponse = await fetch("https://api.spotify.com/v1/playlists/" + encodeURIComponent(playlistId) + "/items", {
-    method: "POST",
-    headers: { Authorization: "Bearer " + accessToken, "Content-Type": "application/json" },
-    body: JSON.stringify({ uris: tracks })
-  });
-  const addData = await addResponse.json();
-  if (!addResponse.ok) {
-    throw new Error("ADD TRACKS failed: " + JSON.stringify(addData));
+  const existingUris = await getPlaylistTrackUris(accessToken, playlistId);
+  const newTracks = tracks.filter(uri => !existingUris.has(uri));
+
+  if (newTracks.length) {
+    const addResponse = await fetch("https://api.spotify.com/v1/playlists/" + encodeURIComponent(playlistId) + "/items", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + accessToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ uris: newTracks })
+    });
+    const addData = await addResponse.json();
+    if (!addResponse.ok) {
+      throw new Error("ADD TRACKS failed: " + JSON.stringify(addData));
+    }
   }
 
   await sbPatch("gd_rounds", "id=eq." + roundId, {
@@ -165,7 +187,7 @@ async function syncRound(roundId) {
     spotify_playlist_url: playlistUrl
   });
 
-  return { playlistId: playlistId, playlistUrl: playlistUrl, added: tracks.length };
+  return { playlistId: playlistId, playlistUrl: playlistUrl, added: newTracks.length, skippedDuplicates: tracks.length - newTracks.length };
 }
 
 exports.handler = async function() {

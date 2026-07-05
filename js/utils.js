@@ -34,9 +34,9 @@ function escapeHtml(s) {
     return d.innerHTML;
   }
 
-function pickGenre(recent) {
-    const pool = GENRES.filter(g => recent.indexOf(g) === -1);
-    const usable = pool.length ? pool : GENRES;
+function pickPrompt(recent) {
+    const pool = PROMPTS.filter(p => recent.indexOf(p) === -1);
+    const usable = pool.length ? pool : PROMPTS;
     return usable[Math.floor(Math.random() * usable.length)];
   }
 
@@ -48,4 +48,35 @@ function monthLabel(monthId) {
     const parts = monthId.split("-").map(Number);
     const dt = new Date(parts[0], parts[1] - 1, 1);
     return dt.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  }
+
+function addDaysToDateStr(dayId, delta) {
+    const parts = dayId.split("-").map(Number);
+    const dt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    dt.setUTCDate(dt.getUTCDate() + delta);
+    const y = dt.getUTCFullYear();
+    const m = String(dt.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(dt.getUTCDate()).padStart(2, "0");
+    return y + "-" + m + "-" + d;
+  }
+
+function computeStreaks(submissionDays, todayId) {
+    const byPlayer = {};
+    NAMES.forEach(function(name) { byPlayer[name] = new Set(); });
+    submissionDays.forEach(function(row) {
+      if (byPlayer[row.player]) byPlayer[row.player].add(row.round_id);
+    });
+
+    const streaks = {};
+    NAMES.forEach(function(name) {
+      const days = byPlayer[name];
+      let cursor = days.has(todayId) ? todayId : addDaysToDateStr(todayId, -1);
+      let count = 0;
+      while (days.has(cursor)) {
+        count++;
+        cursor = addDaysToDateStr(cursor, -1);
+      }
+      streaks[name] = count;
+    });
+    return streaks;
   }

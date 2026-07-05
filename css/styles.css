@@ -274,6 +274,12 @@ body {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+.gd-streak {
+  color: var(--amber);
+  font-size: 11px;
+  letter-spacing: normal;
+  text-transform: none;
+}
 .gd-stub-main {
   font-size: 14px;
   margin-top: 2px;

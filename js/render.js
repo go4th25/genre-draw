@@ -5,11 +5,13 @@ function render() {
 
     const playerListHtml = NAMES.map(function(name) {
       const sub = getSubmissionFor(name);
+      const streak = state.streaks[name] || 0;
+      const streakHtml = streak > 1 ? ' <span class="gd-streak">🔥' + streak + '</span>' : '';
 
       if (sub) {
         return '<div class="gd-stub">' +
           '<div class="gd-stub-left">' +
-            '<div class="gd-stub-date">' + escapeHtml(name) + '</div>' +
+            '<div class="gd-stub-date">' + escapeHtml(name) + streakHtml + '</div>' +
             '<div class="gd-stub-main"><b>' + escapeHtml(sub.song_title) + '</b> — ' + escapeHtml(sub.song_artist) + '</div>' +
             spotifySmallHtml(sub) +
             spotifyPlayerHtml(sub) +
@@ -20,7 +22,7 @@ function render() {
 
       return '<div class="gd-stub">' +
         '<div class="gd-stub-left">' +
-          '<div class="gd-stub-date">' + escapeHtml(name) + '</div>' +
+          '<div class="gd-stub-date">' + escapeHtml(name) + streakHtml + '</div>' +
           '<div class="gd-stub-main"><span style="color:var(--muted)">Waiting for a song</span></div>' +
         '</div>' +
         '<div class="gd-stub-genre">Open</div>' +
@@ -42,12 +44,12 @@ function render() {
       '<div class="gd-header">' +
         '<p class="gd-eyebrow">Group Chat Radio</p>' +
         '<h1 class="gd-title">Genre <span>Draw</span></h1>' +
-        '<p class="gd-sub">One genre. Five songs. Let the debate begin.</p>' +
+        '<p class="gd-sub">One prompt. Five songs. Straight to the playlist.</p>' +
       '</div>' +
 
       '<div class="gd-ticket">' +
         '<div class="gd-ticket-top"><span>Group Round</span><span>' + prettyDate(round.id) + '</span></div>' +
-        '<p class="gd-drawn-for">Today&apos;s genre</p>' +
+        '<p class="gd-drawn-for">Today&apos;s prompt</p>' +
         '<div class="gd-genre-stamp">' + escapeHtml(round.genre) + '</div>' +
         '<div class="gd-status-row"><span class="gd-dot ' + (allSubmitted ? 'gd-done' : 'gd-live') + '"></span><span>' + submittedCount + ' / ' + NAMES.length + ' songs submitted' + (allSubmitted ? ' — submissions locked' : '') + '</span></div>' +
         '<div class="gd-perf"></div>' +
@@ -57,14 +59,12 @@ function render() {
       '<p class="gd-hist-title">Today&apos;s Submissions</p>' +
       playerListHtml +
 
-      '<div id="gd-vote-zone"></div>' +
       '<div id="gd-music-zone"></div>' +
 
       '<p class="gd-hist-title" style="margin-top:28px;">Past Rounds</p>' +
       historyHtml;
 
     renderFormZone();
-    renderVoteZone(allSubmitted);
     renderMusicZone(allSubmitted);
   }
 
@@ -176,7 +176,8 @@ function renderFormZone() {
         });
 
         state.submissions = await loadSubmissions(state.round.id);
-        state.votes = await loadVotes(state.round.id);
+        const recentSubmissionDays = await loadRecentSubmissionDays();
+        state.streaks = computeStreaks(recentSubmissionDays, state.round.id);
         render();
       } catch (e) {
         console.error(e);
@@ -185,110 +186,6 @@ function renderFormZone() {
       }
     };
   }
-
-function renderVoteZone(allSubmitted) {
-    const zone = document.getElementById("gd-vote-zone");
-    const savedPlayer = getSavedPlayer();
-
-    if (!allSubmitted) {
-      zone.innerHTML =
-        '<p class="gd-hist-title" style="margin-top:28px;">Voting</p>' +
-        '<p class="gd-empty">Voting unlocks once all 5 songs are submitted.</p>';
-      return;
-    }
-
-    const leaderboard = leaderboardRows();
-    const leaderboardHtml = leaderboard.map(function(row, index) {
-      const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : "";
-      const avgText = row.count ? row.avg.toFixed(1) : "—";
-      return '<div class="gd-stub">' +
-        '<div class="gd-stub-left">' +
-          '<div class="gd-stub-date">' + medal + ' ' + escapeHtml(row.submission.player) + '</div>' +
-          '<div class="gd-stub-main"><b>' + escapeHtml(row.submission.song_title) + '</b> — ' + escapeHtml(row.submission.song_artist) + '</div>' +
-          spotifySmallHtml(row.submission) +
-          spotifyPlayerHtml(row.submission) +
-        '</div>' +
-        '<div class="gd-stub-genre">' + avgText + '</div>' +
-      '</div>';
-    }).join("");
-
-    if (!savedPlayer) {
-      zone.innerHTML =
-        '<p class="gd-hist-title" style="margin-top:28px;">Voting</p>' +
-        '<p class="gd-empty">Choose who you are above to vote.</p>' +
-        '<p class="gd-hist-title" style="margin-top:28px;">Leaderboard</p>' +
-        leaderboardHtml;
-      return;
-    }
-
-    zone.innerHTML =
-      '<p class="gd-hist-title" style="margin-top:28px;">Voting</p>' +
-      '<div class="gd-ticket" style="margin-top:8px;">' +
-        '<p class="gd-genre-label">Cast votes</p>' +
-        '<div class="gd-status-row" style="margin-top:0;margin-bottom:14px;">' +
-          '<span>Voting as <b>' + escapeHtml(savedPlayer) + '</b></span>' +
-        '</div>' +
-        '<div id="gd-vote-list"></div>' +
-      '</div>' +
-      '<p class="gd-hist-title" style="margin-top:28px;">Leaderboard</p>' +
-      leaderboardHtml;
-
-    setupVoteControls(savedPlayer);
-  }
-
-function setupVoteControls(voter) {
-    const voteList = document.getElementById("gd-vote-list");
-
-    function scoreOptions(current) {
-      let html = '<option value="">Score</option>';
-      for (let i = 1; i <= 10; i++) {
-        html += '<option value="' + i + '"' + (Number(current) === i ? ' selected' : '') + '>' + i + '</option>';
-      }
-      return html;
-    }
-
-    const voteable = state.submissions.filter(s => s.player !== voter);
-
-    voteList.innerHTML = voteable.map(function(sub) {
-      const existing = getVote(voter, sub.id);
-      const current = existing ? existing.score : "";
-
-      const voteControl = existing
-        ? '<div class="gd-stub-genre">' + escapeHtml(String(current)) + '/10 locked</div>'
-        : '<select class="gd-score-select" data-submission-id="' + sub.id + '" style="background:var(--panel-2);border:1px solid rgba(242,236,216,0.14);border-radius:8px;padding:8px;color:var(--paper);font-family:JetBrains Mono,monospace;font-size:12px;">' +
-            scoreOptions(current) +
-          '</select>';
-
-      return '<div class="gd-stub">' +
-        '<div class="gd-stub-left">' +
-          '<div class="gd-stub-date">' + escapeHtml(sub.player) + '</div>' +
-          '<div class="gd-stub-main"><b>' + escapeHtml(sub.song_title) + '</b> — ' + escapeHtml(sub.song_artist) + '</div>' +
-          spotifySmallHtml(sub) +
-          spotifyPlayerHtml(sub) +
-        '</div>' +
-        voteControl +
-      '</div>';
-    }).join("");
-
-    Array.from(document.querySelectorAll(".gd-score-select")).forEach(function(select) {
-      select.onchange = async function() {
-        const score = Number(select.value);
-        const submissionId = select.getAttribute("data-submission-id");
-        if (!score) return;
-
-        select.disabled = true;
-        try {
-          await saveVote(state.round.id, voter, submissionId, score);
-          state.votes = await loadVotes(state.round.id);
-          render();
-        } catch (e) {
-          console.error(e);
-          select.disabled = false;
-        }
-      };
-    });
-  }
-
 
 function renderMusicZone(allSubmitted) {
   const zone = document.getElementById("gd-music-zone");

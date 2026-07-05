@@ -95,6 +95,17 @@ async function saveSong(roundId, player, song) {
     }
   }
 
+async function loadRecentSubmissionDays() {
+    const { data, error } = await sb
+      .from("gd_submissions")
+      .select("round_id, player")
+      .order("round_id", { ascending: false })
+      .limit(2000);
+
+    if (error) throw error;
+    return data || [];
+  }
+
 async function loadHistory(excludeKey) {
     const { data, error } = await sb
       .from("gd_rounds")

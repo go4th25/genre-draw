@@ -28,5 +28,5 @@ var PROMPTS = [
 ];
 
 var root = document.getElementById("gd-app");
-var state = { config: null, round: null, submissions: [], history: [] };
+var state = { config: null, round: null, submissions: [], history: [], streaks: {} };
 var PLAYER_KEY = "genreDrawPlayer";

@@ -5,11 +5,13 @@ function render() {
 
     const playerListHtml = NAMES.map(function(name) {
       const sub = getSubmissionFor(name);
+      const streak = state.streaks[name] || 0;
+      const streakHtml = streak > 1 ? ' <span class="gd-streak">🔥' + streak + '</span>' : '';
 
       if (sub) {
         return '<div class="gd-stub">' +
           '<div class="gd-stub-left">' +
-            '<div class="gd-stub-date">' + escapeHtml(name) + '</div>' +
+            '<div class="gd-stub-date">' + escapeHtml(name) + streakHtml + '</div>' +
             '<div class="gd-stub-main"><b>' + escapeHtml(sub.song_title) + '</b> — ' + escapeHtml(sub.song_artist) + '</div>' +
             spotifySmallHtml(sub) +
             spotifyPlayerHtml(sub) +
@@ -20,7 +22,7 @@ function render() {
 
       return '<div class="gd-stub">' +
         '<div class="gd-stub-left">' +
-          '<div class="gd-stub-date">' + escapeHtml(name) + '</div>' +
+          '<div class="gd-stub-date">' + escapeHtml(name) + streakHtml + '</div>' +
           '<div class="gd-stub-main"><span style="color:var(--muted)">Waiting for a song</span></div>' +
         '</div>' +
         '<div class="gd-stub-genre">Open</div>' +
@@ -174,6 +176,8 @@ function renderFormZone() {
         });
 
         state.submissions = await loadSubmissions(state.round.id);
+        const recentSubmissionDays = await loadRecentSubmissionDays();
+        state.streaks = computeStreaks(recentSubmissionDays, state.round.id);
         render();
       } catch (e) {
         console.error(e);

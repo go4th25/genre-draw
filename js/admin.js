@@ -30,9 +30,11 @@ function renderAdmin(message) {
 
     const submissionsHtml = NAMES.map(function(name) {
       const sub = getSubmissionFor(name);
+      const streak = state.streaks[name] || 0;
+      const streakHtml = streak > 1 ? ' <span class="gd-streak">🔥' + streak + '</span>' : '';
       return '<div class="gd-stub">' +
         '<div class="gd-stub-left">' +
-          '<div class="gd-stub-date">' + escapeHtml(name) + '</div>' +
+          '<div class="gd-stub-date">' + escapeHtml(name) + streakHtml + '</div>' +
           '<div class="gd-stub-main">' + (sub ? '<b>' + escapeHtml(sub.song_title) + '</b> — ' + escapeHtml(sub.song_artist) : '<span style="color:var(--muted)">No submission</span>') + '</div>' +
         '</div>' +
         '<div class="gd-stub-genre">' + (sub ? 'Ready' : 'Open') + '</div>' +
@@ -127,8 +129,10 @@ async function checkSpotifyAdminStatus() {
 async function reloadAdmin(message) {
     const submissions = await loadSubmissions(state.round.id);
     const history = await loadHistory(state.round.id);
+    const recentSubmissionDays = await loadRecentSubmissionDays();
     state.submissions = submissions;
     state.history = history;
+    state.streaks = computeStreaks(recentSubmissionDays, state.round.id);
     renderAdmin(message);
   }
 

@@ -34,9 +34,9 @@ function escapeHtml(s) {
     return d.innerHTML;
   }
 
-function pickGenre(recent) {
-    const pool = GENRES.filter(g => recent.indexOf(g) === -1);
-    const usable = pool.length ? pool : GENRES;
+function pickPrompt(recent) {
+    const pool = PROMPTS.filter(p => recent.indexOf(p) === -1);
+    const usable = pool.length ? pool : PROMPTS;
     return usable[Math.floor(Math.random() * usable.length)];
   }
 

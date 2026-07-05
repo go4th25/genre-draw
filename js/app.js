@@ -3,7 +3,6 @@ async function init() {
     const config = await getConfig();
     const result = await getOrCreateRound(config);
     const submissions = await loadSubmissions(result.round.id);
-    const votes = await loadVotes(result.round.id);
     const history = await loadHistory(result.round.id);
     const monthPlaylist = await getMonthPlaylist(monthIdFromDay(result.round.id));
 
@@ -11,7 +10,6 @@ async function init() {
       config: result.config,
       round: result.round,
       submissions: submissions,
-      votes: votes,
       history: history,
       monthPlaylistUrl: monthPlaylist ? monthPlaylist.spotify_playlist_url : null
     };

@@ -184,18 +184,41 @@ function wireAdminButtons() {
     };
   }
 
-async function fillDemoSongs() {
-    const demo = [
-      { player: "Nick", title: "Dreams", artist: "Fleetwood Mac" },
-      { player: "Nani", title: "Sweet Disposition", artist: "The Temper Trap" },
-      { player: "Trenton", title: "Space Song", artist: "Beach House" },
-      { player: "Danny", title: "Electric Feel", artist: "MGMT" },
-      { player: "Jace", title: "Everybody Wants To Rule The World", artist: "Tears For Fears" }
-    ];
+const DEMO_SONG_POOL = [
+  { title: "Dreams", artist: "Fleetwood Mac" },
+  { title: "Sweet Disposition", artist: "The Temper Trap" },
+  { title: "Space Song", artist: "Beach House" },
+  { title: "Electric Feel", artist: "MGMT" },
+  { title: "Everybody Wants To Rule The World", artist: "Tears For Fears" },
+  { title: "Redbone", artist: "Childish Gambino" },
+  { title: "Mr. Brightside", artist: "The Killers" },
+  { title: "Take On Me", artist: "a-ha" },
+  { title: "Two Weeks", artist: "FKA twigs" },
+  { title: "Kids", artist: "MGMT" },
+  { title: "Midnight City", artist: "M83" },
+  { title: "Heat Waves", artist: "Glass Animals" },
+  { title: "Do I Wanna Know?", artist: "Arctic Monkeys" },
+  { title: "Just Like Heaven", artist: "The Cure" },
+  { title: "Northern Downpour", artist: "Panic! At The Disco" },
+  { title: "505", artist: "Arctic Monkeys" },
+  { title: "Somebody Else", artist: "The 1975" },
+  { title: "Tongue Tied", artist: "Grouplove" },
+  { title: "Sex on Fire", artist: "Kings of Leon" },
+  { title: "Pumped Up Kicks", artist: "Foster the People" },
+  { title: "Riptide", artist: "Vance Joy" },
+  { title: "Chamber of Reflection", artist: "Mac DeMarco" },
+  { title: "Ivy", artist: "Frank Ocean" },
+  { title: "Motion Sickness", artist: "Phoebe Bridgers" },
+  { title: "The Less I Know The Better", artist: "Tame Impala" }
+];
 
-    for (const item of demo) {
+async function fillDemoSongs() {
+    const picks = shuffle(DEMO_SONG_POOL).slice(0, NAMES.length);
+
+    for (let i = 0; i < NAMES.length; i++) {
+      const item = picks[i];
       const spotify = await searchSpotify(item.title, item.artist);
-      await saveSong(state.round.id, item.player, {
+      await saveSong(state.round.id, NAMES[i], {
         title: spotify ? spotify.title : item.title,
         artist: spotify ? spotify.artist : item.artist,
         url: null,
